@@ -1,9 +1,0 @@
-/Users/juanmy_bg/Documents/Bon Gamin /Uni 2024/3er año materiales to tiza to gucci que te hace po/Lo mio/semestre 2/comp/the-evil-compiler/hulk/target/debug/deps/ascii_canvas-7ccb56d7c7bb97f9.d: /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/lib.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/row.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/style.rs
-
-/Users/juanmy_bg/Documents/Bon Gamin /Uni 2024/3er año materiales to tiza to gucci que te hace po/Lo mio/semestre 2/comp/the-evil-compiler/hulk/target/debug/deps/libascii_canvas-7ccb56d7c7bb97f9.rlib: /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/lib.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/row.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/style.rs
-
-/Users/juanmy_bg/Documents/Bon Gamin /Uni 2024/3er año materiales to tiza to gucci que te hace po/Lo mio/semestre 2/comp/the-evil-compiler/hulk/target/debug/deps/libascii_canvas-7ccb56d7c7bb97f9.rmeta: /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/lib.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/row.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/style.rs
-
-/Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/lib.rs:
-/Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/row.rs:
-/Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ascii-canvas-4.0.0/src/style.rs:
