@@ -1,0 +1,10 @@
+/Users/juanmy_bg/Documents/Bon Gamin /Uni 2024/3er año materiales to tiza to gucci que te hace po/Lo mio/semestre 2/comp/the-evil-compiler/hulk/target/debug/deps/log-80c538c8250f3945.d: /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs
+
+/Users/juanmy_bg/Documents/Bon Gamin /Uni 2024/3er año materiales to tiza to gucci que te hace po/Lo mio/semestre 2/comp/the-evil-compiler/hulk/target/debug/deps/liblog-80c538c8250f3945.rlib: /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs
+
+/Users/juanmy_bg/Documents/Bon Gamin /Uni 2024/3er año materiales to tiza to gucci que te hace po/Lo mio/semestre 2/comp/the-evil-compiler/hulk/target/debug/deps/liblog-80c538c8250f3945.rmeta: /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs /Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs
+
+/Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/lib.rs:
+/Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/macros.rs:
+/Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/serde.rs:
+/Users/juanmy_bg/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/log-0.4.29/src/__private_api.rs:
