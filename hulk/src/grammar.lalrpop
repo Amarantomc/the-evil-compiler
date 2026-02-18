@@ -1,0 +1,78 @@
+use std::str::FromStr;
+use crate::ast::{Expr, Opcode}; 
+
+grammar;
+
+pub Expr: Box<Expr> = { 
+    Expr OrOpcode AndExpr=> Box::new(Expr::Op(<>)), 
+    AndExpr,
+};
+
+OrOpcode : Opcode = {
+    "||" => Opcode::Or
+}
+
+pub AndExpr : Box<Expr> = {
+    AndExpr AndOpcode CompExpr => Box::new(Expr::Op(<>)), 
+    CompExpr,
+};
+
+AndOpcode : Opcode = {
+    "&&" => Opcode::And
+}
+
+pub CompExpr : Box<Expr> = {
+    CompExpr CompOpcode  ArithExpr => Box::new(Expr::Op(<>)), 
+    ArithExpr,
+};
+
+CompOpcode: Opcode = { 
+    "==" => Opcode::Equal,
+    "!=" => Opcode::Dist,
+    ">=" => Opcode::Gequa,
+    "<=" => Opcode::Lequa,
+    ">" => Opcode::Great,
+    "<" => Opcode::Less
+};
+
+
+pub ArithExpr : Box<Expr> = {
+    ArithExpr ArithOpCode FactAnd => Box::new(Expr::Op(<>)), 
+    FactAnd,
+};
+
+ArithOpCode: Opcode = { 
+    "+" => Opcode::Add,
+    "-" => Opcode::Sub,
+};
+
+
+FactAnd: Box<Expr> = {
+    FactAnd FactAndOp Base => Box::new(Expr::Op(<>)),
+    Base,
+};
+
+FactAndOp: Opcode = {
+    "*" => Opcode::Mul,
+    "/" => Opcode::Div,
+};
+
+
+Base: Box<Expr> = {
+    Base PowOpcode Term => Box::new(Expr::Op(<>)),
+    Term,
+};
+
+PowOpcode : Opcode = {
+    "^" => Opcode::Pow
+}
+
+Term: Box<Expr> = {
+    Num => Box::new(Expr::Number(<>)),
+    "(" <Expr> ")"
+};
+
+
+Num: i32 = {
+    r"[0-9]+" => i32::from_str(<>).unwrap()
+};
