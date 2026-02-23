@@ -1,6 +1,7 @@
 use lalrpop_util::lalrpop_mod; 
 
 pub mod ast;
+pub mod expr_visitor;
 lalrpop_mod!(grammar); 
 
 fn main() {
