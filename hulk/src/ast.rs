@@ -1,3 +1,4 @@
+use crate::expr_visitor::ExprVisitor;
 #[derive(Debug)]
 pub enum Expr {
     Number(i32),
@@ -20,4 +21,15 @@ pub enum Opcode{
     Less,
     And,
     Or,
+}
+
+
+impl Expr {
+    fn accept<T>(&self, v: &mut impl ExprVisitor<T>) -> T {
+        match self {
+            Expr::Number(n) => v.visit_number(*n),
+            Expr::Op(left, op,right )=>v.visit_binary_op(left, op, right)
+             
+        }
+    }
 }
