@@ -5,6 +5,8 @@ edition = "2024"
 
 [build-dependencies] # 
 lalrpop = "0.23.0"
+inkwell = { version = "0.8.0", features = ["llvm20-1"] }
 
 [dependencies]
 lalrpop-util = { version = "0.21.0", features = ["lexer", "unicode"] }
+inkwell = { version = "0.8.0", features = ["llvm20-1"] }
