@@ -1,0 +1,123 @@
+use crate::ast::{Expr, Opcode};
+use crate::codegen::CodeGenerator;
+use crate::expr_visitor::ExprVisitor;
+use inkwell::IntPredicate;
+use inkwell::values::IntValue;
+
+impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
+    fn visit_number(&mut self, n: i32) -> IntValue<'ctx> {
+        // NOTA:
+        // Si devolvemos una constante pura (`const_int`), LLVM puede hacer constant folding
+        // cuando esa constante se usa en `add/mul/...`, y el IR termina como `ret i32 16`.
+        // Para ver el "código" IR completo (add/mul) materializamos el literal:
+        //   %slot = alloca i32
+        //   store i32 <n>, ptr %slot
+        //   %val  = load i32, ptr %slot
+        // y devolvemos `%val`.
+        let slot = self.create_entry_i32_alloca("num");
+        let c = self.context.i32_type().const_int(n as u64, false);
+        self.builder.build_store(slot, c).unwrap();
+        self.builder
+            .build_load(self.context.i32_type(), slot, "num_val")
+            .unwrap()
+            .into_int_value()
+    }
+
+    fn visit_binary_op(&mut self, left: &Expr, op: &Opcode, right: &Expr) -> IntValue<'ctx> {
+        let left_val = left.accept(self);
+        let right_val = right.accept(self);
+
+        match op {
+            Opcode::Add => self
+                .builder
+                .build_int_add(left_val, right_val, "add")
+                .unwrap(),
+            Opcode::Sub => self
+                .builder
+                .build_int_sub(left_val, right_val, "sub")
+                .unwrap(),
+            Opcode::Mul => self
+                .builder
+                .build_int_mul(left_val, right_val, "mul")
+                .unwrap(),
+            Opcode::Div => self
+                .builder
+                .build_int_signed_div(left_val, right_val, "div")
+                .unwrap(),
+
+            // Comparaciones
+            Opcode::Equal => {
+                let cmp = self
+                    .builder
+                    .build_int_compare(IntPredicate::EQ, left_val, right_val, "eq")
+                    .unwrap();
+                self.builder
+                    .build_int_z_extend(cmp, self.context.i32_type(), "eq_ext")
+                    .unwrap()
+            }
+            Opcode::Great => {
+                let cmp = self
+                    .builder
+                    .build_int_compare(IntPredicate::SGT, left_val, right_val, "gt")
+                    .unwrap();
+                self.builder
+                    .build_int_z_extend(cmp, self.context.i32_type(), "gt_ext")
+                    .unwrap()
+            }
+            Opcode::Less => {
+                let cmp = self
+                    .builder
+                    .build_int_compare(IntPredicate::SLT, left_val, right_val, "lt")
+                    .unwrap();
+                self.builder
+                    .build_int_z_extend(cmp, self.context.i32_type(), "lt_ext")
+                    .unwrap()
+            }
+            Opcode::Gequa => {
+                let cmp = self
+                    .builder
+                    .build_int_compare(IntPredicate::SGE, left_val, right_val, "ge")
+                    .unwrap();
+                self.builder
+                    .build_int_z_extend(cmp, self.context.i32_type(), "ge_ext")
+                    .unwrap()
+            }
+            Opcode::Lequa => {
+                let cmp = self
+                    .builder
+                    .build_int_compare(IntPredicate::SLE, left_val, right_val, "le")
+                    .unwrap();
+                self.builder
+                    .build_int_z_extend(cmp, self.context.i32_type(), "le_ext")
+                    .unwrap()
+            }
+
+            // Distancia: valor absoluto
+            Opcode::Dist => {
+                let sub = self
+                    .builder
+                    .build_int_sub(left_val, right_val, "dist_sub")
+                    .unwrap();
+                let zero = self.context.i32_type().const_int(0, false);
+
+                let is_negative = self
+                    .builder
+                    .build_int_compare(IntPredicate::SLT, sub, zero, "is_neg")
+                    .unwrap();
+
+                let neg_sub = self.builder.build_int_sub(zero, sub, "neg_sub").unwrap();
+
+                self.builder
+                    .build_select(is_negative, neg_sub, sub, "dist")
+                    .unwrap()
+                    .into_int_value()
+            }
+
+            // No implementados
+            Opcode::Pow => panic!("Pow no implementado"),
+            Opcode::Sqrt => panic!("Sqrt no implementado"),
+            Opcode::And => panic!("And no implementado"),
+            Opcode::Or => panic!("Or no implementado"),
+        }
+    }
+}
