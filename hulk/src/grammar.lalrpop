@@ -1,78 +1,220 @@
 use std::str::FromStr;
-use crate::ast::{Expr, Opcode}; 
+use crate::ast::{Expr, LetNode, IfNode, WhileNode, ForNode, FunCallNode, DestAssignNode, BinaryOpNode, UnaryOpNode, LiteralNode, IdentifierNode, BlockNode, BinaryOp, UnaryOp, Literal, Program, Statement, FunctionDecl};
 
 grammar;
 
-pub Expr: Box<Expr> = { 
-    Expr OrOpcode AndExpr=> Box::new(Expr::Op(<>)), 
+pub Program: Program = {
+    <stmts:Statement+> => Program::new(stmts),
+};
+
+Statement: Statement = {
+    <FunctionDecl> => Statement::FunctionDecl(<>),
+    <expr:TopExpr> => Statement::Expression(expr),
+};
+
+// Top level: SimpleExpr requiere ; u BlockExpr tiene ; opcional
+TopExpr: Expr = {
+    <e:SimpleExpr> ";" => e,
+    <e:BlockExpr> (";")?  => e
+};
+
+FunctionDecl: FunctionDecl = {
+    "function" <name:Ident> "(" <params:Comma<Ident>> ")" "=>" <body:Expr> ";" => {
+        FunctionDecl::new(name, params, body)
+    },
+    "function" <name:Ident> "(" <params:Comma<Ident>> ")" <body:BlockExpr> (";")?  => {
+        FunctionDecl::new(name, params, body)
+    },
+};
+
+Comma<T>: Vec<T> = { 
+    <mut v:(<T> ",")*> <e:T?> => match e { 
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+ 
+
+// Expresión pura (sin ; manejo): usado dentro de Let, If, While, For
+pub Expr: Expr = {
+    SimpleExpr,
+    BlockExpr,
+};
+
+// Expresiones simples que requieren ; en top level (pero el ; se agrega en TopExpr)
+SimpleExpr: Expr = {
+    LetExpr,
+    IfExpr,
+    WhileExpr,
+    ForExpr,
+    OrExpr,
+};
+
+// Bloques que tienen ; opcional en top level
+BlockExpr: Expr = {
+    "{" <exprs:(BlockItem)*> "}"  => {
+        Expr::Block(BlockNode::new(exprs))
+    }
+};
+
+// Items dentro de un bloque: pueden ser simples (con ;) o bloques (con ; opcional)
+BlockItem: Expr = {
+    <e:SimpleExpr> ";" => e,
+    <e:BlockExpr> (";")?  => e
+};
+
+LetExpr: Expr = {
+    "let" <assignments:Comma<Assignment>> "in" <body:Expr> => {
+        Expr::Let(LetNode::new(assignments, body))
+    },
+};
+
+IfExpr: Expr = {
+    "if" "(" <cond:OrExpr> ")" <true_branch:Expr> <elif_branches:Elif*> "else" <false_branch:Expr> => {
+        Expr::If(IfNode::new(cond, true_branch, elif_branches, false_branch))
+    },
+};
+
+Elif: (Expr, Expr) = {
+    "elif" "(" <cond:OrExpr> ")" <body:Expr> => (cond, body),
+};
+
+WhileExpr: Expr = {
+    "while" "(" <cond:OrExpr> ")" <body:Expr> => {
+        Expr::While(WhileNode::new(cond, body))
+    },
+};
+
+ForExpr: Expr = {
+    "for" "(" <var:Ident> "in" <iter:OrExpr> ")" <body:Expr> => {
+        Expr::For(ForNode::new(var, iter, body))
+    },
+};
+
+Assignment: (String, Expr) = {
+    <id:Ident> "=" <expr:OrExpr> => (id, expr),
+};
+
+pub OrExpr: Expr = { 
+    <l:OrExpr> <op:OrOpcode> <r:AndExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
     AndExpr,
 };
 
-OrOpcode : Opcode = {
-    "||" => Opcode::Or
-}
+OrOpcode: BinaryOp = {
+    "|" => BinaryOp::Or,
+    "||" => BinaryOp::Or
+};
 
-pub AndExpr : Box<Expr> = {
-    AndExpr AndOpcode CompExpr => Box::new(Expr::Op(<>)), 
+pub AndExpr: Expr = {
+    <l:AndExpr> <op:AndOpcode> <r:AssignExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    AssignExpr,
+};
+
+AndOpcode: BinaryOp = {
+    "&" => BinaryOp::And,
+    "&&" => BinaryOp::And
+};
+
+AssignExpr: Expr = {
+    <id:Ident> ":=" <expr:AssignExpr> => {
+        Expr::DestAssign(DestAssignNode::new(id, expr))
+    },
     CompExpr,
 };
 
-AndOpcode : Opcode = {
-    "&&" => Opcode::And
-}
-
-pub CompExpr : Box<Expr> = {
-    CompExpr CompOpcode  ArithExpr => Box::new(Expr::Op(<>)), 
+pub CompExpr: Expr = {
+    <l:CompExpr> <op:CompOpcode> <r:ArithExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
     ArithExpr,
 };
 
-CompOpcode: Opcode = { 
-    "==" => Opcode::Equal,
-    "!=" => Opcode::Dist,
-    ">=" => Opcode::Gequa,
-    "<=" => Opcode::Lequa,
-    ">" => Opcode::Great,
-    "<" => Opcode::Less
+CompOpcode: BinaryOp = { 
+    "==" => BinaryOp::Equal,
+    "!=" => BinaryOp::Dist,
+    ">=" => BinaryOp::Gequa,
+    "<=" => BinaryOp::Lequa,
+    ">" => BinaryOp::Great,
+    "<" => BinaryOp::Less
 };
 
-
-pub ArithExpr : Box<Expr> = {
-    ArithExpr ArithOpCode FactAnd => Box::new(Expr::Op(<>)), 
+pub ArithExpr: Expr = {
+    <l:ArithExpr> <op:ArithOpCode> <r:FactAnd> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
     FactAnd,
 };
 
-ArithOpCode: Opcode = { 
-    "+" => Opcode::Add,
-    "-" => Opcode::Sub,
+ArithOpCode: BinaryOp = { 
+    "+" => BinaryOp::Add,
+    "-" => BinaryOp::Sub,
 };
 
+FactAnd: Expr = {
+    <l:FactAnd> <op:FactAndOp> <r:UnaryExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    UnaryExpr,
+};
 
-FactAnd: Box<Expr> = {
-    FactAnd FactAndOp Base => Box::new(Expr::Op(<>)),
+FactAndOp: BinaryOp = {
+    "*" => BinaryOp::Mul,
+    "/" => BinaryOp::Div,
+    "%" => BinaryOp::Mod,
+};
+
+UnaryExpr: Expr = {
+    <op:UnaryOpCode> <expr:Base> => {
+        Expr::Unary(UnaryOpNode::new(op, expr))
+    },
     Base,
 };
 
-FactAndOp: Opcode = {
-    "*" => Opcode::Mul,
-    "/" => Opcode::Div,
+UnaryOpCode: UnaryOp = {
+    "+" => UnaryOp::Plus,
+    "-" => UnaryOp::Neg,
+    "!" => UnaryOp::Not,
 };
 
-
-Base: Box<Expr> = {
-    Base PowOpcode Term => Box::new(Expr::Op(<>)),
+Base: Expr = {
+    <l:Base> <op:PowOpcode> <r:Term> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
     Term,
 };
 
-PowOpcode : Opcode = {
-    "^" => Opcode::Pow
-}
+PowOpcode: BinaryOp = {
+    "^" => BinaryOp::Pow
+};
 
-Term: Box<Expr> = {
-    Num => Box::new(Expr::Number(<>)),
+Term: Expr = {
+    Num => Expr::Literal(LiteralNode::new(Literal::Number(<>))),
+    "true" => Expr::Literal(LiteralNode::new(Literal::Bool(true))),
+    "false" => Expr::Literal(LiteralNode::new(Literal::Bool(false))),
+    StringLit => Expr::Literal(LiteralNode::new(Literal::Str(<>))),
+    <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
+        Expr::FunCall(FunCallNode::new(id, args))
+    },
+    <id:Ident> => Expr::Identifier(IdentifierNode::new(id)),
     "(" <Expr> ")"
 };
 
+Num: f32 = {
+    r"[0-9]+(\.[0-9]+)?" => f32::from_str(<>).unwrap()
+};
 
-Num: i32 = {
-    r"[0-9]+" => i32::from_str(<>).unwrap()
+StringLit: String = {
+    r#""[^"]*""# => <>.trim_matches('"').to_string()
+};
+
+Ident: String = {
+    r"[a-zA-Z_][a-zA-Z0-9_]*" => <>.to_string(),
 };
