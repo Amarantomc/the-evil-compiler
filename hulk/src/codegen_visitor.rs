@@ -1,11 +1,11 @@
-use crate::ast::{Expr, Opcode};
+use crate::ast::{Expr, BinaryOp};
 use crate::codegen::CodeGenerator;
 use crate::expr_visitor::ExprVisitor;
 use inkwell::IntPredicate;
 use inkwell::values::IntValue;
 
 impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
-    fn visit_number(&mut self, n: i32) -> IntValue<'ctx> {
+    fn visit_number(&mut self, n: f32) -> IntValue<'ctx> {
         // NOTA:
         // Si devolvemos una constante pura (`const_int`), LLVM puede hacer constant folding
         // cuando esa constante se usa en `add/mul/...`, y el IR termina como `ret i32 16`.
@@ -23,30 +23,30 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
             .into_int_value()
     }
 
-    fn visit_binary_op(&mut self, left: &Expr, op: &Opcode, right: &Expr) -> IntValue<'ctx> {
+    fn visit_binary_op(&mut self, left: &Expr, op: &BinaryOp, right: &Expr) -> IntValue<'ctx> {
         let left_val = left.accept(self);
         let right_val = right.accept(self);
 
         match op {
-            Opcode::Add => self
+            BinaryOp::Add => self
                 .builder
                 .build_int_add(left_val, right_val, "add")
                 .unwrap(),
-            Opcode::Sub => self
+            BinaryOp::Sub => self
                 .builder
                 .build_int_sub(left_val, right_val, "sub")
                 .unwrap(),
-            Opcode::Mul => self
+            BinaryOp::Mul => self
                 .builder
                 .build_int_mul(left_val, right_val, "mul")
                 .unwrap(),
-            Opcode::Div => self
+            BinaryOp::Div => self
                 .builder
                 .build_int_signed_div(left_val, right_val, "div")
                 .unwrap(),
 
             // Comparaciones
-            Opcode::Equal => {
+            BinaryOp::Equal => {
                 let cmp = self
                     .builder
                     .build_int_compare(IntPredicate::EQ, left_val, right_val, "eq")
@@ -55,7 +55,7 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
                     .build_int_z_extend(cmp, self.context.i32_type(), "eq_ext")
                     .unwrap()
             }
-            Opcode::Great => {
+            BinaryOp::Great => {
                 let cmp = self
                     .builder
                     .build_int_compare(IntPredicate::SGT, left_val, right_val, "gt")
@@ -64,7 +64,7 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
                     .build_int_z_extend(cmp, self.context.i32_type(), "gt_ext")
                     .unwrap()
             }
-            Opcode::Less => {
+            BinaryOp::Less => {
                 let cmp = self
                     .builder
                     .build_int_compare(IntPredicate::SLT, left_val, right_val, "lt")
@@ -73,7 +73,7 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
                     .build_int_z_extend(cmp, self.context.i32_type(), "lt_ext")
                     .unwrap()
             }
-            Opcode::Gequa => {
+            BinaryOp::Gequa => {
                 let cmp = self
                     .builder
                     .build_int_compare(IntPredicate::SGE, left_val, right_val, "ge")
@@ -82,7 +82,7 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
                     .build_int_z_extend(cmp, self.context.i32_type(), "ge_ext")
                     .unwrap()
             }
-            Opcode::Lequa => {
+            BinaryOp::Lequa => {
                 let cmp = self
                     .builder
                     .build_int_compare(IntPredicate::SLE, left_val, right_val, "le")
@@ -93,7 +93,7 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
             }
 
             // Distancia: valor absoluto
-            Opcode::Dist => {
+            BinaryOp::Dist => {
                 let sub = self
                     .builder
                     .build_int_sub(left_val, right_val, "dist_sub")
@@ -113,11 +113,11 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
                     .into_int_value()
             }
 
-            // No implementados
-            Opcode::Pow => panic!("Pow no implementado"),
-            Opcode::Sqrt => panic!("Sqrt no implementado"),
-            Opcode::And => panic!("And no implementado"),
-            Opcode::Or => panic!("Or no implementado"),
+            // No implementados o nuevos en BinaryOp
+            BinaryOp::Pow => panic!("Pow no implementado"),
+            BinaryOp::And => panic!("And no implementado"),
+            BinaryOp::Or => panic!("Or no implementado"),
+            BinaryOp::Mod => panic!("Mod no implementado"),
         }
     }
 }
