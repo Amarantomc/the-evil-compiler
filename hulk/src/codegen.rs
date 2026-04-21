@@ -3,7 +3,6 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{InitializationConfig, Target};
-use inkwell::values::PointerValue;
 use std::fs;
 use std::io;
 
@@ -49,41 +48,6 @@ impl<'ctx> CodeGenerator<'ctx> {
             let result = main_function.call();
             Ok(result)
         }
-    }
-
-    /// Crea un `alloca i32` al inicio del bloque `entry` de la función actual.
-    ///
-    /// ¿Por qué esto existe?
-    /// - LLVM (vía el builder) hace *constant folding* automáticamente cuando operas
-    ///   con constantes puras (por ejemplo, `2 + 2`), y entonces el IR termina como
-    ///   `ret i32 16` en vez de mostrar `add` y `mul`.
-    /// - Para forzar que aparezcan instrucciones en el IR, materializamos literales
-    ///   en memoria: `alloca` + `store` + `load`. El `load` ya NO es una constante,
-    ///   así que `add/mul` se emiten como instrucciones reales.
-    pub fn create_entry_i32_alloca(&self, name: &str) -> PointerValue<'ctx> {
-        let insert_block = self
-            .builder
-            .get_insert_block()
-            .expect("Builder no está posicionado en ningún bloque (¿olvidaste position_at_end?)");
-        let function = insert_block
-            .get_parent()
-            .expect("No se pudo obtener la función actual desde el bloque");
-        let entry = function
-            .get_first_basic_block()
-            .expect("La función no tiene bloque entry");
-
-        // Usamos un builder temporal SOLO para insertar el `alloca` al inicio del entry.
-        // Así no alteramos la posición del builder principal (que está generando el cuerpo).
-        let tmp_builder = self.context.create_builder();
-        if let Some(first_inst) = entry.get_first_instruction() {
-            tmp_builder.position_before(&first_inst);
-        } else {
-            tmp_builder.position_at_end(entry);
-        }
-
-        tmp_builder
-            .build_alloca(self.context.i32_type(), name)
-            .expect("No se pudo crear alloca i32")
     }
 
     /// Compila a LLVM IR y genera un objeto (.o)

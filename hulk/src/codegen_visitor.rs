@@ -6,21 +6,7 @@ use inkwell::values::IntValue;
 
 impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
     fn visit_number(&mut self, n: f32) -> IntValue<'ctx> {
-        // NOTA:
-        // Si devolvemos una constante pura (`const_int`), LLVM puede hacer constant folding
-        // cuando esa constante se usa en `add/mul/...`, y el IR termina como `ret i32 16`.
-        // Para ver el "código" IR completo (add/mul) materializamos el literal:
-        //   %slot = alloca i32
-        //   store i32 <n>, ptr %slot
-        //   %val  = load i32, ptr %slot
-        // y devolvemos `%val`.
-        let slot = self.create_entry_i32_alloca("num");
-        let c = self.context.i32_type().const_int(n as u64, false);
-        self.builder.build_store(slot, c).unwrap();
-        self.builder
-            .build_load(self.context.i32_type(), slot, "num_val")
-            .unwrap()
-            .into_int_value()
+        self.context.i32_type().const_int(n as u64, false)
     }
 
     fn visit_binary_op(&mut self, left: &Expr, op: &BinaryOp, right: &Expr) -> IntValue<'ctx> {
@@ -119,5 +105,49 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
             BinaryOp::Or => panic!("Or no implementado"),
             BinaryOp::Mod => panic!("Mod no implementado"),
         }
+    }
+    
+    fn visit_bool(&mut self, b: bool) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_string(&mut self, s: &str) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_unary_op(&mut self, op: &crate::ast::UnaryOp, expr: &Expr) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_let(&mut self, node: &crate::ast::LetNode) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_if(&mut self, node: &crate::ast::IfNode) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_while(&mut self, node: &crate::ast::WhileNode) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_for(&mut self, node: &crate::ast::ForNode) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_fun_call(&mut self, node: &crate::ast::FunCallNode) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_dest_assign(&mut self, node: &crate::ast::DestAssignNode) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_identifier(&mut self, node: &crate::ast::IdentifierNode) -> IntValue<'ctx> {
+        todo!()
+    }
+    
+    fn visit_block(&mut self, node: &crate::ast::BlockNode) -> IntValue<'ctx> {
+        todo!()
     }
 }

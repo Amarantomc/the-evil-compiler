@@ -240,10 +240,19 @@ impl Expr {
         match self {
             Expr::Literal(node) => match &node.value {
                 Literal::Number(n) => v.visit_number(*n),
-                _ => todo!("Implement visit for other literals"),
+                Literal::Bool(b) => v.visit_bool(*b),
+                Literal::Str(s) => v.visit_string(s),
             },
             Expr::Binary(node) => v.visit_binary_op(&node.left, &node.op, &node.right),
-            _ => todo!("Implement visit for other expression types"),
+            Expr::Unary(node) => v.visit_unary_op(&node.op, &node.expr),
+            Expr::Let(node) => v.visit_let(node),
+            Expr::If(node) => v.visit_if(node),
+            Expr::While(node) => v.visit_while(node),
+            Expr::For(node) => v.visit_for(node),
+            Expr::FunCall(node) => v.visit_fun_call(node),
+            Expr::DestAssign(node) => v.visit_dest_assign(node),
+            Expr::Identifier(node) => v.visit_identifier(node),
+            Expr::Block(node) => v.visit_block(node),
         }
     }
 }
