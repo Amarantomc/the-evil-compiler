@@ -1,19 +1,19 @@
-use crate::ast::{Expr, BinaryOp};
+use crate::ast::{BinaryOp, Expr};
 use crate::codegen::CodeGenerator;
 use crate::expr_visitor::ExprVisitor;
+use inkwell::values::{BasicValue, BasicValueEnum, IntValue};
 use inkwell::IntPredicate;
-use inkwell::values::IntValue;
 
-impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
-    fn visit_number(&mut self, n: f32) -> IntValue<'ctx> {
-        self.context.i32_type().const_int(n as u64, false)
+impl<'ctx> ExprVisitor<BasicValueEnum<'ctx>> for CodeGenerator<'ctx> {
+    fn visit_number(&mut self, n: f32) -> BasicValueEnum<'ctx> {
+        self.context.i32_type().const_int(n as u64, false).into()
     }
 
-    fn visit_binary_op(&mut self, left: &Expr, op: &BinaryOp, right: &Expr) -> IntValue<'ctx> {
-        let left_val = left.accept(self);
-        let right_val = right.accept(self);
+    fn visit_binary_op(&mut self, left: &Expr, op: &BinaryOp, right: &Expr) -> BasicValueEnum<'ctx> {
+        let left_val = left.accept(self).into_int_value();
+        let right_val = right.accept(self).into_int_value();
 
-        match op {
+        let result: IntValue = match op {
             BinaryOp::Add => self
                 .builder
                 .build_int_add(left_val, right_val, "add")
@@ -104,50 +104,78 @@ impl<'ctx> ExprVisitor<IntValue<'ctx>> for CodeGenerator<'ctx> {
             BinaryOp::And => panic!("And no implementado"),
             BinaryOp::Or => panic!("Or no implementado"),
             BinaryOp::Mod => panic!("Mod no implementado"),
-        }
+        };
+
+        result.into()
     }
-    
-    fn visit_bool(&mut self, b: bool) -> IntValue<'ctx> {
+
+    fn visit_bool(&mut self, b: bool) -> BasicValueEnum<'ctx> {
+        let val = if b { 1 } else { 0 };
+        self.context.i32_type().const_int(val, false).into()
+    }
+
+    fn visit_string(&mut self, s: &str) -> BasicValueEnum<'ctx> {
+        self.builder
+            .build_global_string_ptr(s, "str")
+            .unwrap()
+            .as_basic_value_enum()
+    }
+
+    fn visit_unary_op(&mut self, op: &crate::ast::UnaryOp, expr: &Expr) -> BasicValueEnum<'ctx> {
+        let val = expr.accept(self).into_int_value();
+
+        let result: IntValue = match op {
+            crate::ast::UnaryOp::Plus => val,
+            crate::ast::UnaryOp::Neg => self.builder.build_int_neg(val, "neg").unwrap(),
+            crate::ast::UnaryOp::Not => {
+                // Not lógico: si es 0 pasas a 1, si es != 0 pasas a 0.
+                let is_zero = self
+                    .builder
+                    .build_int_compare(
+                        IntPredicate::EQ,
+                        val,
+                        self.context.i32_type().const_int(0, false),
+                        "is_zero",
+                    )
+                    .unwrap();
+                self.builder
+                    .build_int_z_extend(is_zero, self.context.i32_type(), "not_ext")
+                    .unwrap()
+            }
+        };
+
+        result.into()
+    }
+
+    fn visit_let(&mut self, _node: &crate::ast::LetNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-    
-    fn visit_string(&mut self, s: &str) -> IntValue<'ctx> {
+
+    fn visit_if(&mut self, _node: &crate::ast::IfNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-    
-    fn visit_unary_op(&mut self, op: &crate::ast::UnaryOp, expr: &Expr) -> IntValue<'ctx> {
+
+    fn visit_while(&mut self, _node: &crate::ast::WhileNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-    
-    fn visit_let(&mut self, node: &crate::ast::LetNode) -> IntValue<'ctx> {
+
+    fn visit_for(&mut self, _node: &crate::ast::ForNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-    
-    fn visit_if(&mut self, node: &crate::ast::IfNode) -> IntValue<'ctx> {
+
+    fn visit_fun_call(&mut self, _node: &crate::ast::FunCallNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-    
-    fn visit_while(&mut self, node: &crate::ast::WhileNode) -> IntValue<'ctx> {
+
+    fn visit_dest_assign(&mut self, _node: &crate::ast::DestAssignNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-    
-    fn visit_for(&mut self, node: &crate::ast::ForNode) -> IntValue<'ctx> {
+
+    fn visit_identifier(&mut self, _node: &crate::ast::IdentifierNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-    
-    fn visit_fun_call(&mut self, node: &crate::ast::FunCallNode) -> IntValue<'ctx> {
-        todo!()
-    }
-    
-    fn visit_dest_assign(&mut self, node: &crate::ast::DestAssignNode) -> IntValue<'ctx> {
-        todo!()
-    }
-    
-    fn visit_identifier(&mut self, node: &crate::ast::IdentifierNode) -> IntValue<'ctx> {
-        todo!()
-    }
-    
-    fn visit_block(&mut self, node: &crate::ast::BlockNode) -> IntValue<'ctx> {
+
+    fn visit_block(&mut self, _node: &crate::ast::BlockNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
 }
