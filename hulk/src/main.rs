@@ -6,6 +6,9 @@ lalrpop_mod!(grammar);
 pub mod codegen;
 pub mod codegen_visitor;
 pub mod semantic;
+pub  mod  nodes{
+    pub mod function_decl_node;
+    pub mod literal_node;}
 fn main() {
     let input = "let x= \"peseta\", b= 7 + x  in x;";
 
