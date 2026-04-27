@@ -14,19 +14,68 @@ impl Program {
 #[derive(Debug)]
 pub enum Statement {
     FunctionDecl(FunctionDecl),
-    Expression(Expr),
+    Expression(TypedExpr),
 }
 
 #[derive(Debug)]
 pub struct FunctionDecl {
-    pub name: String,
-    pub params: Vec<String>,
-    pub body: Expr,
+    pub name: LiteralNode,
+    pub params: Vec<(LiteralNode, HulkType)>,
+    pub body: TypedExpr,
 }
 
 impl FunctionDecl {
-    pub fn new(name: String, params: Vec<String>, body: Expr) -> Self {
+    pub fn new(name: LiteralNode, params: Vec<(LiteralNode,HulkType)>, body: TypedExpr) -> Self {
         FunctionDecl { name, params, body }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HulkType {
+    Number,
+    Bool,
+    String,
+    Unknown,
+}
+
+
+#[derive(Debug)]
+pub struct TypedExpr {
+    pub kind: Expr,
+    pub return_type: HulkType,
+}
+
+impl TypedExpr {
+    pub fn new(kind: Expr) -> Self {
+        TypedExpr {
+            kind,
+            return_type: HulkType::Unknown, // Por defecto es desconocido hasta la fase semántica
+        }
+    }
+    
+    // Opcional: un constructor si ya sabes el tipo desde el parseo
+    pub fn with_type(kind: Expr, return_type: HulkType) -> Self {
+        TypedExpr { kind, return_type }
+    }
+
+    pub fn accept<T>(&self, v: &mut impl ExprVisitor<T>) -> T {
+        match &self.kind {
+            Expr::Literal(node) => match &node.value {
+                Literal::Number(n) => v.visit_number(*n),
+                Literal::Bool(b) => v.visit_bool(*b),
+                Literal::Str(s) => v.visit_string(s),
+                Literal::Id(id) => v.visit_id(id),
+            },
+            Expr::Binary(node) => v.visit_binary_op(&node.left, &node.op, &node.right),
+            Expr::Unary(node) => v.visit_unary_op(&node.op, &node.expr),
+            Expr::Let(node) => v.visit_let(node),
+            Expr::If(node) => v.visit_if(node),
+            Expr::While(node) => v.visit_while(node),
+            Expr::For(node) => v.visit_for(node),
+            Expr::FunCall(node) => v.visit_fun_call(node),
+            Expr::DestAssign(node) => v.visit_dest_assign(node),
+            Expr::Block(node) => v.visit_block(node),
+        }
     }
 }
 
@@ -42,18 +91,17 @@ pub enum Expr {
     Binary(BinaryOpNode),
     Unary(UnaryOpNode),
     Literal(LiteralNode),
-    Identifier(IdentifierNode),
     Block(BlockNode),
 }
 
 #[derive(Debug)]
 pub struct LetNode {
-    pub assignments: Vec<(String, Expr)>,
-    pub body: Box<Expr>,
+    pub assignments: Vec<((LiteralNode,HulkType), TypedExpr)>,
+    pub body: Box<TypedExpr>,
 }
 
 impl LetNode {
-    pub fn new(assignments: Vec<(String, Expr)>, body: Expr) -> Self {
+    pub fn new(assignments: Vec<((LiteralNode,HulkType), TypedExpr)>, body: TypedExpr) -> Self {
         LetNode {
             assignments,
             body: Box::new(body),
@@ -63,14 +111,14 @@ impl LetNode {
 
 #[derive(Debug)]
 pub struct IfNode {
-    pub condition: Box<Expr>,
-    pub if_branch: Box<Expr>,
-    pub elif_branches: Vec<(Expr, Expr)>,
-    pub else_branch: Box<Expr>,
+    pub condition: Box<TypedExpr>,
+    pub if_branch: Box<TypedExpr>,
+    pub elif_branches: Vec<(TypedExpr, TypedExpr)>,
+    pub else_branch: Box<TypedExpr>,
 }
 
 impl IfNode {
-    pub fn new(condition: Expr, if_branch: Expr, elif_branches: Vec<(Expr, Expr)>, else_branch: Expr) -> Self {
+    pub fn new(condition: TypedExpr, if_branch:TypedExpr, elif_branches: Vec<(TypedExpr, TypedExpr)>, else_branch: TypedExpr) -> Self {
         IfNode {
             condition: Box::new(condition),
             if_branch: Box::new(if_branch),
@@ -82,12 +130,12 @@ impl IfNode {
 
 #[derive(Debug)]
 pub struct WhileNode {
-    pub condition: Box<Expr>,
-    pub body: Box<Expr>,
+    pub condition: Box<TypedExpr>,
+    pub body: Box<TypedExpr>,
 }
 
 impl WhileNode {
-    pub fn new(condition: Expr, body: Expr) -> Self {
+    pub fn new(condition: TypedExpr, body: TypedExpr) -> Self {
         WhileNode {
             condition: Box::new(condition),
             body: Box::new(body),
@@ -97,13 +145,13 @@ impl WhileNode {
 
 #[derive(Debug)]
 pub struct ForNode {
-    pub variable: String,
-    pub iterator: Box<Expr>,
-    pub body: Box<Expr>,
+    pub variable: LiteralNode,
+    pub iterator: Box<TypedExpr>,
+    pub body: Box<TypedExpr>,
 }
 
 impl ForNode {
-    pub fn new(variable: String, iterator: Expr, body: Expr) -> Self {
+    pub fn new(variable: LiteralNode, iterator: TypedExpr, body: TypedExpr) -> Self {
         ForNode {
             variable,
             iterator: Box::new(iterator),
@@ -114,24 +162,24 @@ impl ForNode {
 
 #[derive(Debug)]
 pub struct FunCallNode {
-    pub name: String,
-    pub args: Vec<Expr>,
+    pub name: LiteralNode,
+    pub args: Vec<TypedExpr>,
 }
 
 impl FunCallNode {
-    pub fn new(name: String, args: Vec<Expr>) -> Self {
+    pub fn new(name: LiteralNode, args: Vec<TypedExpr>) -> Self {
         FunCallNode { name, args }
     }
 }
 
 #[derive(Debug)]
 pub struct DestAssignNode {
-    pub identifier: String,
-    pub expr: Box<Expr>,
+    pub identifier: LiteralNode,
+    pub expr: Box<TypedExpr>,
 }
 
 impl DestAssignNode {
-    pub fn new(identifier: String, expr: Expr) -> Self {
+    pub fn new(identifier: LiteralNode, expr: TypedExpr) -> Self {
         DestAssignNode {
             identifier,
             expr: Box::new(expr),
@@ -141,13 +189,13 @@ impl DestAssignNode {
 
 #[derive(Debug)]
 pub struct BinaryOpNode {
-    pub left: Box<Expr>,
+    pub left: Box<TypedExpr>,
     pub op: BinaryOp,
-    pub right: Box<Expr>,
+    pub right: Box<TypedExpr>,
 }
 
 impl BinaryOpNode {
-    pub fn new(left: Expr, op: BinaryOp, right: Expr) -> Self {
+    pub fn new(left: TypedExpr, op: BinaryOp, right: TypedExpr) -> Self {
         BinaryOpNode {
             left: Box::new(left),
             op,
@@ -159,11 +207,11 @@ impl BinaryOpNode {
 #[derive(Debug)]
 pub struct UnaryOpNode {
     pub op: UnaryOp,
-    pub expr: Box<Expr>,
+    pub expr: Box<TypedExpr>,
 }
 
 impl UnaryOpNode {
-    pub fn new(op: UnaryOp, expr: Expr) -> Self {
+    pub fn new(op: UnaryOp, expr: TypedExpr) -> Self {
         UnaryOpNode {
             op,
             expr: Box::new(expr),
@@ -183,23 +231,12 @@ impl LiteralNode {
 }
 
 #[derive(Debug)]
-pub struct IdentifierNode {
-    pub name: String,
-}
-
-impl IdentifierNode {
-    pub fn new(name: String) -> Self {
-        IdentifierNode { name }
-    }
-}
-
-#[derive(Debug)]
 pub struct BlockNode {
-    pub expressions: Vec<Expr>,
+    pub expressions: Vec<TypedExpr>,
 }
 
 impl BlockNode {
-    pub fn new(expressions: Vec<Expr>) -> Self {
+    pub fn new(expressions: Vec<TypedExpr>) -> Self {
         BlockNode { expressions }
     }
 }
@@ -209,6 +246,7 @@ pub enum Literal {
     Number(f32),
     Bool(bool),
     Str(String),
+    Id(String)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -235,24 +273,6 @@ pub enum UnaryOp {
     Plus,
 }
 
-impl Expr {
-    pub fn accept<T>(&self, v: &mut impl ExprVisitor<T>) -> T {
-        match self {
-            Expr::Literal(node) => match &node.value {
-                Literal::Number(n) => v.visit_number(*n),
-                Literal::Bool(b) => v.visit_bool(*b),
-                Literal::Str(s) => v.visit_string(s),
-            },
-            Expr::Binary(node) => v.visit_binary_op(&node.left, &node.op, &node.right),
-            Expr::Unary(node) => v.visit_unary_op(&node.op, &node.expr),
-            Expr::Let(node) => v.visit_let(node),
-            Expr::If(node) => v.visit_if(node),
-            Expr::While(node) => v.visit_while(node),
-            Expr::For(node) => v.visit_for(node),
-            Expr::FunCall(node) => v.visit_fun_call(node),
-            Expr::DestAssign(node) => v.visit_dest_assign(node),
-            Expr::Identifier(node) => v.visit_identifier(node),
-            Expr::Block(node) => v.visit_block(node),
-        }
-    }
-}
+// impl Expr {
+  
+// }

@@ -6,7 +6,7 @@ use inkwell::targets::{InitializationConfig, Target};
 use std::fs;
 use std::io;
 
-use crate::ast::Expr;
+use crate::ast::{TypedExpr};
 
 pub struct CodeGenerator<'ctx> {
     pub context: &'ctx Context,
@@ -101,7 +101,7 @@ impl<'ctx> CodeGenerator<'ctx> {
 }
 
 pub fn generate_ir_and_execute(
-    ast: &Expr,
+    ast: &TypedExpr,
     module_name: &str,
     ir_output: Option<&str>,
 ) -> Result<i32, Box<dyn std::error::Error>> {

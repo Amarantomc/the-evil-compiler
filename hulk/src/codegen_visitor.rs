@@ -1,4 +1,4 @@
-use crate::ast::{BinaryOp, Expr};
+use crate::ast::{BinaryOp, TypedExpr};
 use crate::codegen::CodeGenerator;
 use crate::expr_visitor::ExprVisitor;
 use inkwell::values::{BasicValue, BasicValueEnum, IntValue};
@@ -9,7 +9,7 @@ impl<'ctx> ExprVisitor<BasicValueEnum<'ctx>> for CodeGenerator<'ctx> {
         self.context.i32_type().const_int(n as u64, false).into()
     }
 
-    fn visit_binary_op(&mut self, left: &Expr, op: &BinaryOp, right: &Expr) -> BasicValueEnum<'ctx> {
+    fn visit_binary_op(&mut self, left: &TypedExpr, op: &BinaryOp, right: &TypedExpr) -> BasicValueEnum<'ctx> {
         let left_val = left.accept(self).into_int_value();
         let right_val = right.accept(self).into_int_value();
 
@@ -121,7 +121,7 @@ impl<'ctx> ExprVisitor<BasicValueEnum<'ctx>> for CodeGenerator<'ctx> {
             .as_basic_value_enum()
     }
 
-    fn visit_unary_op(&mut self, op: &crate::ast::UnaryOp, expr: &Expr) -> BasicValueEnum<'ctx> {
+    fn visit_unary_op(&mut self, op: &crate::ast::UnaryOp, expr: &TypedExpr) -> BasicValueEnum<'ctx> {
         let val = expr.accept(self).into_int_value();
 
         let result: IntValue = match op {
@@ -171,11 +171,11 @@ impl<'ctx> ExprVisitor<BasicValueEnum<'ctx>> for CodeGenerator<'ctx> {
         todo!()
     }
 
-    fn visit_identifier(&mut self, _node: &crate::ast::IdentifierNode) -> BasicValueEnum<'ctx> {
+    fn visit_block(&mut self, _node: &crate::ast::BlockNode) -> BasicValueEnum<'ctx> {
         todo!()
     }
-
-    fn visit_block(&mut self, _node: &crate::ast::BlockNode) -> BasicValueEnum<'ctx> {
+    
+    fn visit_id(&mut self, id: &str) -> BasicValueEnum<'ctx> {
         todo!()
     }
 }
