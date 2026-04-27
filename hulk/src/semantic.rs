@@ -1,10 +1,5 @@
-// semantic.rs
 use std::collections::HashMap;
-use crate::ast::{
-    BinaryOp, BlockNode, DestAssignNode, Expr, ForNode, FunCallNode, HulkType, IfNode, LetNode,
-    Literal, LiteralNode, Program, Statement, TypedExpr, UnaryOp, WhileNode,
-};
-use crate::expr_visitor::ExprVisitor;
+use crate::{expr_visitor::ExprVisitor, nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, let_node::LetNode, literal_node::Literal, program_node::{Program, Statement}, typedexpr_node::{HulkType, TypedExpr}, unaryop_node::UnaryOp, while_node::WhileNode}};
 
 // Entorno para guardar variables locales y firmas de funciones
 pub struct Environment {

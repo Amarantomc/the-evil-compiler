@@ -1,5 +1,19 @@
 use std::str::FromStr;
-use crate::ast::{Expr, TypedExpr, HulkType, LetNode, IfNode, WhileNode, ForNode, FunCallNode, DestAssignNode, BinaryOpNode, UnaryOpNode, LiteralNode, BlockNode, BinaryOp, UnaryOp, Literal, Program, Statement, FunctionDecl};
+use crate::nodes::{
+    binaryop_node::{BinaryOp, BinaryOpNode},
+    block_node::BlockNode,
+    destassing_node::DestAssignNode,
+    for_node::ForNode,
+    funcall_node::FunCallNode,
+    function_decl_node::FunctionDecl,
+    if_node::IfNode,
+    let_node::LetNode,
+    literal_node::{Literal, LiteralNode},
+    program_node::{Program, Statement},
+    typedexpr_node::{Expr, HulkType, TypedExpr},
+    unaryop_node::{UnaryOp, UnaryOpNode},
+    while_node::WhileNode,
+};
 
 grammar;
 

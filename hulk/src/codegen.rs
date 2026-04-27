@@ -6,7 +6,9 @@ use inkwell::targets::{InitializationConfig, Target};
 use std::fs;
 use std::io;
 
-use crate::ast::{TypedExpr};
+use crate::nodes::typedexpr_node::TypedExpr;
+
+
 
 pub struct CodeGenerator<'ctx> {
     pub context: &'ctx Context,

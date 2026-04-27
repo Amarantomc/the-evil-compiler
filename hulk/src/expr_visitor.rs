@@ -1,7 +1,6 @@
-use crate::ast::{
-    BinaryOp, BlockNode, DestAssignNode, ForNode, FunCallNode, IfNode,
-    LetNode, UnaryOp, WhileNode, TypedExpr
-};
+use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, let_node::LetNode, typedexpr_node::TypedExpr, unaryop_node::UnaryOp, while_node::WhileNode};
+
+ 
 
 pub trait ExprVisitor<T> {
     fn visit_number(&mut self, n: f32) -> T;
