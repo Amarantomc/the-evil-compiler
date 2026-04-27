@@ -5,20 +5,34 @@ pub mod expr_visitor;
 lalrpop_mod!(grammar);
 pub mod codegen;
 pub mod codegen_visitor;
+pub mod semantic;
 fn main() {
-    let expr = grammar::ExprParser::new();
+    let input = "let x= \"peseta\", b= 7 + x  in x;";
 
-    let input = "(2 + 2)* 4 > (5+5)";
-
-    match expr.parse(input) {
-        Ok(ast) => {
-            println!("AST generado: {:?}\n", ast);
-
-            match codegen::generate_ir_and_execute(&ast, "hulk_module", Some("output.ll")) {
-                Ok(result) => println!("Resultado de ejecución JIT: {}", result),
-                Err(e) => eprintln!("Error durante codegen/JIT: {}", e),
-            }
+    // 2. Parsear el código para obtener el AST
+    let parser = grammar::ProgramParser::new();
+    let mut program = match parser.parse(input) {
+        Ok(ast) => ast,
+        Err(e) => {
+            eprintln!("Error de sintaxis: {:?}", e);
+            std::process::exit(1);
         }
-        Err(e) => eprintln!("Error al parsear: {}", e),
+    };
+
+    // 3. Ejecutar el chequeo semántico
+    let mut checker = semantic::SemanticChecker::new();
+    checker.check_program(&mut program);
+
+    // 4. Reportar errores o confirmar éxito
+    if !checker.errors.is_empty() {
+        eprintln!("Se encontraron errores semánticos:");
+        for error in &checker.errors {
+            eprintln!("- {}", error);
+        }
+        std::process::exit(1);
+    } else {
+        println!("Chequeo semántico exitoso. El programa es válido.");
+        // Opcional: imprimir el AST procesado
+        // println!("{:#?}", program);
     }
 }
