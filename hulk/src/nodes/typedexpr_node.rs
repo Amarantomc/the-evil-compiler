@@ -1,0 +1,70 @@
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HulkType {
+    Number,
+    Bool,
+    String,
+    Unknown,
+}
+
+// Representa todo tipo de expresión en el lenguaje
+#[derive(Debug)]
+pub enum Expr {
+    Let(LetNode),
+    If(IfNode),
+    While(WhileNode),
+    For(ForNode),
+    FunCall(FunCallNode),
+    DestAssign(DestAssignNode),
+    Binary(BinaryOpNode),
+    Unary(UnaryOpNode),
+    Literal(LiteralNode),
+    Block(BlockNode),
+}
+
+
+
+
+#[derive(Debug)]
+pub struct TypedExpr {
+    pub kind: Expr,
+    pub return_type: HulkType,
+}
+
+
+
+
+impl TypedExpr {
+    pub fn new(kind: Expr) -> Self {
+        TypedExpr {
+            kind,
+            return_type: HulkType::Unknown, // Por defecto es desconocido hasta la fase semántica
+        }
+    }
+    
+    // Opcional: un constructor si ya sabes el tipo desde el parseo
+    pub fn with_type(kind: Expr, return_type: HulkType) -> Self {
+        TypedExpr { kind, return_type }
+    }
+
+    pub fn accept<T>(&self, v: &mut impl ExprVisitor<T>) -> T {
+        match &self.kind {
+            Expr::Literal(node) => match &node.value {
+                Literal::Number(n) => v.visit_number(*n),
+                Literal::Bool(b) => v.visit_bool(*b),
+                Literal::Str(s) => v.visit_string(s),
+                Literal::Id(id) => v.visit_id(id),
+            },
+            Expr::Binary(node) => v.visit_binary_op(&node.left, &node.op, &node.right),
+            Expr::Unary(node) => v.visit_unary_op(&node.op, &node.expr),
+            Expr::Let(node) => v.visit_let(node),
+            Expr::If(node) => v.visit_if(node),
+            Expr::While(node) => v.visit_while(node),
+            Expr::For(node) => v.visit_for(node),
+            Expr::FunCall(node) => v.visit_fun_call(node),
+            Expr::DestAssign(node) => v.visit_dest_assign(node),
+            Expr::Block(node) => v.visit_block(node),
+        }
+    }
+}
+
