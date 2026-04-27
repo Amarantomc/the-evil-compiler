@@ -7,8 +7,20 @@ pub mod codegen;
 pub mod codegen_visitor;
 pub mod semantic;
 pub  mod  nodes{
+    pub mod typedexpr_node;
     pub mod function_decl_node;
-    pub mod literal_node;}
+    pub mod literal_node;
+    pub mod destassing_node;
+    pub mod block_node;
+    pub mod binaryop_node;
+    pub mod unaryop_node;
+    pub mod for_node;
+    pub mod funcall_node;
+    pub mod if_node;
+    pub mod while_node;
+    pub mod let_node;
+    pub mod program_node;
+}
 fn main() {
     let input = "let x= \"peseta\", b= 7 + x  in x;";
 

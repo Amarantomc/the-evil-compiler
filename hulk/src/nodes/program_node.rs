@@ -1,3 +1,5 @@
+use crate::nodes::{function_decl_node::FunctionDecl, typedexpr_node::TypedExpr};
+
 
 #[derive(Debug)]
 pub struct Program {
