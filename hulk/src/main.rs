@@ -1,6 +1,6 @@
 use lalrpop_util::lalrpop_mod;
 
-pub mod ast;
+
 pub mod expr_visitor;
 lalrpop_mod!(grammar);
 pub mod codegen;
@@ -22,7 +22,7 @@ pub  mod  nodes{
     pub mod program_node;
 }
 fn main() {
-    let input = "let x= \"peseta\", b= 7 + x  in x;";
+    let input = "let x= \"peseta\", b= 7  in x;";
 
     // 2. Parsear el código para obtener el AST
     let parser = grammar::ProgramParser::new();
