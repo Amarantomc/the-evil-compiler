@@ -181,8 +181,14 @@ impl<'ctx> ExprVisitor<BasicValueEnum<'ctx>> for CodeGenerator<'ctx> {
         todo!()
     }
 
-    fn visit_block(&mut self, _node: &BlockNode) -> BasicValueEnum<'ctx> {
-        todo!()
+    fn visit_block(&mut self, node: &BlockNode) -> BasicValueEnum<'ctx> {
+        let mut last_value = self.context.i32_type().const_int(0, false).as_basic_value_enum();
+
+        for expr in &node.expressions {
+            last_value = expr.accept(self);
+        }
+
+        last_value
     }
     
     fn visit_id(&mut self, id: &str) -> BasicValueEnum<'ctx> {

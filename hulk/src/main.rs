@@ -22,7 +22,7 @@ pub  mod  nodes{
     pub mod program_node;
 }
 fn main() {
-    let input = "let x= \"peseta\", b= 7  in x;";
+    let input = "{1+1; 2+1; !true;}";
 
     // 2. Parsear el código para obtener el AST
     let parser = grammar::ProgramParser::new();
@@ -49,5 +49,9 @@ fn main() {
         println!("Chequeo semántico exitoso. El programa es válido.");
         // Opcional: imprimir el AST procesado
         // println!("{:#?}", program);
+        match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
+        Ok(res) => println!("Resultado: {}", res),
+        Err(e) => eprintln!("Error: {}", e),
+    }
     }
 }
