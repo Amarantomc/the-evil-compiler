@@ -165,8 +165,55 @@ impl<'ctx> ExprVisitor<BasicValueEnum<'ctx>> for CodeGenerator<'ctx> {
         todo!()
     }
 
-    fn visit_while(&mut self, _node: &WhileNode) -> BasicValueEnum<'ctx> {
-        todo!()
+    fn visit_while(&mut self, node: &WhileNode) -> BasicValueEnum<'ctx> {
+        
+        //FALTA TESTEO POR FALTA DE LET
+        let parent_func = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+
+        // 1. Crear bloques para la condición, el cuerpo y la salida
+        let cond_bb = self.context.append_basic_block(parent_func, "while_cond");
+        let body_bb = self.context.append_basic_block(parent_func, "while_body");
+        let after_bb = self.context.append_basic_block(parent_func, "while_after");
+
+        // 2. Variable para almacenar el resultado (valor de la última iteración)
+        // Usamos un 'alloca' al inicio de la función (o en el bloque actual)
+        let result_ptr = self.builder.build_alloca(self.context.i32_type(), "while_result").unwrap();
+        // Inicializamos con 0 (o false) por si el bucle nunca se ejecuta
+        self.builder.build_store(result_ptr, self.context.i32_type().const_int(0, false)).unwrap();
+
+        // Salto inicial a la condición
+        self.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // 3. Bloque de la Condición
+        self.builder.position_at_end(cond_bb);
+        let cond_val = node.condition.accept(self).into_int_value();
+        
+        // El tipo Bool en HULK es i1 o i32(0/1). Si es i32, comparamos != 0
+        let is_true = self.builder.build_int_compare(
+            IntPredicate::NE, 
+            cond_val, 
+            self.context.i32_type().const_int(0, false), 
+            "is_true"
+        ).unwrap();
+
+        self.builder.build_conditional_branch(is_true, body_bb, after_bb).unwrap();
+
+        // 4. Bloque del Cuerpo
+        self.builder.position_at_end(body_bb);
+        let body_val = node.body.accept(self);
+        
+        // Guardamos el valor de esta iteración
+        if body_val.is_int_value() {
+            self.builder.build_store(result_ptr, body_val.into_int_value()).unwrap();
+        }
+
+        self.builder.build_unconditional_branch(cond_bb).unwrap();
+
+        // 5. Bloque de Salida
+        self.builder.position_at_end(after_bb);
+        
+        // Cargamos y retornamos el último valor guardado
+        self.builder.build_load(self.context.i32_type(), result_ptr, "final_result").unwrap().as_basic_value_enum()
     }
 
     fn visit_for(&mut self, _node: &ForNode) -> BasicValueEnum<'ctx> {
