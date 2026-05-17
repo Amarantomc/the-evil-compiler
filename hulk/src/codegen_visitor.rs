@@ -151,6 +151,8 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
     fn visit_dest_assign(&mut self, node: &DestAssignNode) -> GeneratorResult {
         let val = node.expr.accept(self);
+        // FIXME: Handle member access assignment like self.x := 5
+        /*
         if let Literal::Id(name) = &node.identifier.value {
             if let Some((ptr, ty)) = self.resolve_variable(name) {
                 // Destructive assignment: actualizamos el valor en la dirección de memoria existente
@@ -158,6 +160,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                 return val;
             }
         }
+        */
         val
     }
 
@@ -238,5 +241,17 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         // Placeholder para strings (requiere manejo de constantes globales)
         self.emit(format!("; string literal: {:?}", s));
         GeneratorResult::new("null".to_string(), "ptr".to_string())
+    }
+    
+    fn visit_instantiation(&mut self, node: &crate::nodes::instantiation_node::InstantiationNode) -> GeneratorResult {
+        todo!()
+    }
+    
+    fn visit_member_access(&mut self, node: &crate::nodes::member_access_node::MemberAccessNode) -> GeneratorResult {
+        todo!()
+    }
+    
+    fn visit_method_call(&mut self, node: &crate::nodes::member_access_node::MethodCallNode) -> GeneratorResult {
+        todo!()
     }
 }

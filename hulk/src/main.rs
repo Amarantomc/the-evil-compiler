@@ -20,9 +20,21 @@ pub  mod  nodes{
     pub mod while_node;
     pub mod let_node;
     pub mod program_node;
+    pub mod type_decl_node;
+    pub mod member_access_node;
+    pub mod instantiation_node;
 }
 fn main() {
-    let input = "let x = 5 + 3 * (2 - 1) in x+1;";
+    let input = "type Point {
+    x = 0;
+    y = 0;
+
+    getX() => self.x;
+    getY() => self.y;
+
+    setX(x) => self.x := x;
+    setY(y) => self.y := y;
+}";
 
     // 2. Parsear el código para obtener el AST
     let parser = grammar::ProgramParser::new();
@@ -35,26 +47,26 @@ fn main() {
     };
 
     // 3. Ejecutar el chequeo semántico
-    let mut checker = semantic::SemanticChecker::new();
-    checker.check_program(&mut program);
+    //let mut checker = semantic::SemanticChecker::new();
+    //checker.check_program(&mut program);
 
     // 4. Reportar errores o confirmar éxito
-    if !checker.errors.is_empty() {
-        eprintln!("Se encontraron errores semánticos:");
-        for error in &checker.errors {
-            eprintln!("- {}", error);
-        }
-        std::process::exit(1);
-    } else {
+    // if !checker.errors.is_empty() {
+    //     eprintln!("Se encontraron errores semánticos:");
+    //     for error in &checker.errors {
+    //         eprintln!("- {}", error);
+    //     }
+    //     std::process::exit(1);
+    // } else {
         println!("Chequeo semántico exitoso. El programa es válido.");
         // Opcional: imprimir el AST procesado
-        // println!("{:#?}", program);
-        match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
-            Ok(res) => {
-                println!("LLVM IR generado exitosamente.");
-                // println!("Resultado IR:\n{}", res);
-            },
-            Err(e) => eprintln!("Error generando IR: {}", e),
-        }
+         println!("{:#?}", program);
+        // match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
+        //     Ok(res) => {
+        //         println!("LLVM IR generado exitosamente.");
+        //         // println!("Resultado IR:\n{}", res);
+        //     },
+        //     Err(e) => eprintln!("Error generando IR: {}", e),
+        // }
     }
-}
+//}

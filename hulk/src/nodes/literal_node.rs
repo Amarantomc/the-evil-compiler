@@ -10,10 +10,19 @@ impl LiteralNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Number(f32),
     Bool(bool),
     Str(String),
     Id(String)
+}
+
+impl Literal {
+    pub fn as_id(&self) -> String {
+        match self {
+            Literal::Id(s) => s.clone(),
+            _ => panic!("Expected Id"),
+        }
+    }
 }

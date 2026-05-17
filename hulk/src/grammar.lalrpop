@@ -7,9 +7,12 @@ use crate::nodes::{
     funcall_node::FunCallNode,
     function_decl_node::FunctionDecl,
     if_node::IfNode,
+    instantiation_node::InstantiationNode,
     let_node::LetNode,
     literal_node::{Literal, LiteralNode},
+    member_access_node::{MemberAccessNode, MethodCallNode},
     program_node::{Program, Statement},
+    type_decl_node::{TypeDeclNode, AttributeNode, TypeBodyItem},
     typedexpr_node::{Expr, HulkType, TypedExpr},
     unaryop_node::{UnaryOp, UnaryOpNode},
     while_node::WhileNode,
@@ -23,6 +26,7 @@ pub Program: Program = {
 
 Statement: Statement = {
     <FunctionDecl> => Statement::FunctionDecl(<>),
+    <TypeDecl> => Statement::TypeDecl(<>),
     <expr:TopExpr> => Statement::Expression(expr),
 };
 
@@ -41,6 +45,39 @@ FunctionDecl: FunctionDecl = {
     },
 };
 
+MethodDecl: FunctionDecl = {
+    <name:Ident> "(" <params:Comma<Param>> ")" "=>" <body:ExprRule> ";" => {
+        FunctionDecl::new(name, params, body)
+    },
+    <name:Ident> "(" <params:Comma<Param>> ")" <body:BlockExpr> (";")?  => {
+        FunctionDecl::new(name, params, body)
+    },
+};
+
+TypeDecl: TypeDeclNode = {
+    "type" <name:Ident> <params:("(" <Comma<Param>> ")")?> "{" <body:TypeBodyItem*> "}" => {
+        let mut attributes = Vec::new();
+        let mut methods = Vec::new();
+        for item in body {
+            match item {
+                TypeBodyItem::Assignment(a) => attributes.push(a),
+                TypeBodyItem::FunctionDecl(m) => methods.push(m),
+            }
+        }
+        TypeDeclNode::new(name, params.unwrap_or(vec![]), attributes, methods)
+    }
+};
+
+TypeBodyItem: TypeBodyItem = {
+    <id:Ident> <ty:TypeAnnotation?> "=" <expr:OrExpr> ";" => {
+        TypeBodyItem::Assignment(AttributeNode::new(id, ty.unwrap_or(HulkType::Unknown), expr))
+    },
+    <MethodDecl> => TypeBodyItem::FunctionDecl(<>),
+};
+ 
+
+ 
+
 Param: (LiteralNode, HulkType) = {
     <id:Ident> <ty:TypeAnnotation?> => (id, ty.unwrap_or(HulkType::Unknown))
 };
@@ -53,7 +90,9 @@ Type: HulkType = {
     "Number" => HulkType::Number,
     "String" => HulkType::String,
     "Boolean" => HulkType::Bool,
+    <id:Ident> =>  HulkType::Class(id.value.as_id())
 };
+
 
 Comma<T>: Vec<T> = { 
     <mut v:(<T> ",")*> <e:T?> => match e { 
@@ -151,7 +190,7 @@ AndOpcode: BinaryOp = {
 };
 
 AssignExpr: TypedExpr = {
-    <id:Ident> ":=" <expr:AssignExpr> => {
+    <id:Term> ":=" <expr:AssignExpr> => {
         TypedExpr::new(Expr::DestAssign(DestAssignNode::new(id, expr)))
     },
     CompExpr,
@@ -227,11 +266,24 @@ Term: TypedExpr = {
     "true" => TypedExpr::new(Expr::Literal(LiteralNode::new(Literal::Bool(true)))),
     "false" => TypedExpr::new(Expr::Literal(LiteralNode::new(Literal::Bool(false)))),
     StringLit => TypedExpr::new(Expr::Literal(LiteralNode::new(Literal::Str(<>)))),
-    <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
-        TypedExpr::new(Expr::FunCall(FunCallNode::new(id, args)))
+    "new" <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
+        TypedExpr::new(Expr::Instantiation(FunCallNode::new(id, args)))
     },
+    <inst:Term> "." <call:FunCall> => {
+        TypedExpr::new(Expr::MethodCall(MethodCallNode::new(inst, call)))
+    },
+    <inst:Term> "." <member:Ident> => {
+        TypedExpr::new(Expr::MemberAccess(MemberAccessNode::new(inst, member)))
+    },
+    <FunCall> => TypedExpr::new(Expr::FunCall(<>)),
     "(" <ExprRule> ")" ,
     <id: Ident> => TypedExpr::new(Expr::Literal(id))
+};
+
+FunCall: FunCallNode = {
+    <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
+        FunCallNode::new(id, args)
+    },
 };
 
 Num: f32 = {

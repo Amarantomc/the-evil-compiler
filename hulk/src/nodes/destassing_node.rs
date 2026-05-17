@@ -1,16 +1,16 @@
-use crate::nodes::{literal_node::LiteralNode, typedexpr_node::TypedExpr};
+use crate::nodes::typedexpr_node::TypedExpr;
 
 
 #[derive(Debug)]
 pub struct DestAssignNode {
-    pub identifier: LiteralNode,
+    pub target: Box<TypedExpr>,
     pub expr: Box<TypedExpr>,
 }
 
 impl DestAssignNode {
-    pub fn new(identifier: LiteralNode, expr: TypedExpr) -> Self {
+    pub fn new(target: TypedExpr, expr: TypedExpr) -> Self {
         DestAssignNode {
-            identifier,
+            target: Box::new(target),
             expr: Box::new(expr),
         }
     }
