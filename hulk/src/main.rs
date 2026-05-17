@@ -22,7 +22,7 @@ pub  mod  nodes{
     pub mod program_node;
 }
 fn main() {
-    let input = "{1+1; 2+1; !true;}";
+    let input = "let x = 5 + 3 * (2 - 1) in x+1;";
 
     // 2. Parsear el código para obtener el AST
     let parser = grammar::ProgramParser::new();
@@ -50,8 +50,11 @@ fn main() {
         // Opcional: imprimir el AST procesado
         // println!("{:#?}", program);
         match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
-        Ok(res) => println!("Resultado: {}", res),
-        Err(e) => eprintln!("Error: {}", e),
-    }
+            Ok(res) => {
+                println!("LLVM IR generado exitosamente.");
+                // println!("Resultado IR:\n{}", res);
+            },
+            Err(e) => eprintln!("Error generando IR: {}", e),
+        }
     }
 }

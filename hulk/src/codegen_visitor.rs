@@ -1,5 +1,4 @@
-
-use crate::codegen::CodeGenerator;
+use crate::codegen::{CodeGenerator, GeneratorResult};
 use crate::expr_visitor::ExprVisitor;
 use crate::nodes::binaryop_node::BinaryOp;
 use crate::nodes::block_node::BlockNode;
@@ -11,234 +10,233 @@ use crate::nodes::let_node::LetNode;
 use crate::nodes::typedexpr_node::TypedExpr;
 use crate::nodes::unaryop_node::UnaryOp;
 use crate::nodes::while_node::WhileNode;
-use inkwell::values::{BasicValue, BasicValueEnum, IntValue};
-use inkwell::IntPredicate;
+use crate::nodes::literal_node::Literal;
 
-impl<'ctx> ExprVisitor<BasicValueEnum<'ctx>> for CodeGenerator<'ctx> {
-    fn visit_number(&mut self, n: f32) -> BasicValueEnum<'ctx> {
-        self.context.i32_type().const_int(n as u64, false).into()
+impl ExprVisitor<GeneratorResult> for CodeGenerator {
+    fn visit_number(&mut self, n: f32) -> GeneratorResult {
+        GeneratorResult::new(n.to_string(), "double".to_string())
     }
 
-    fn visit_binary_op(&mut self, left: &TypedExpr, op: &BinaryOp, right: &TypedExpr) -> BasicValueEnum<'ctx> {
-        let left_val = left.accept(self).into_int_value();
-        let right_val = right.accept(self).into_int_value();
+    fn visit_bool(&mut self, b: bool) -> GeneratorResult {
+        let val = if b { "1" } else { "0" };
+        GeneratorResult::new(val.to_string(), "i1".to_string())
+    }
 
-        let result: IntValue = match op {
-            BinaryOp::Add => self
-                .builder
-                .build_int_add(left_val, right_val, "add")
-                .unwrap(),
-            BinaryOp::Sub => self
-                .builder
-                .build_int_sub(left_val, right_val, "sub")
-                .unwrap(),
-            BinaryOp::Mul => self
-                .builder
-                .build_int_mul(left_val, right_val, "mul")
-                .unwrap(),
-            BinaryOp::Div => self
-                .builder
-                .build_int_signed_div(left_val, right_val, "div")
-                .unwrap(),
+    fn visit_binary_op(&mut self, left: &TypedExpr, op: &BinaryOp, right: &TypedExpr) -> GeneratorResult {
+        let l = left.accept(self);
+        let r = right.accept(self);
+        let res_reg = self.next_temp();
 
-            // Comparaciones
-            BinaryOp::Equal => {
-                let cmp = self
-                    .builder
-                    .build_int_compare(IntPredicate::EQ, left_val, right_val, "eq")
-                    .unwrap();
-                self.builder
-                    .build_int_z_extend(cmp, self.context.i32_type(), "eq_ext")
-                    .unwrap()
-            }
-            BinaryOp::Great => {
-                let cmp = self
-                    .builder
-                    .build_int_compare(IntPredicate::SGT, left_val, right_val, "gt")
-                    .unwrap();
-                self.builder
-                    .build_int_z_extend(cmp, self.context.i32_type(), "gt_ext")
-                    .unwrap()
-            }
-            BinaryOp::Less => {
-                let cmp = self
-                    .builder
-                    .build_int_compare(IntPredicate::SLT, left_val, right_val, "lt")
-                    .unwrap();
-                self.builder
-                    .build_int_z_extend(cmp, self.context.i32_type(), "lt_ext")
-                    .unwrap()
-            }
-            BinaryOp::Gequa => {
-                let cmp = self
-                    .builder
-                    .build_int_compare(IntPredicate::SGE, left_val, right_val, "ge")
-                    .unwrap();
-                self.builder
-                    .build_int_z_extend(cmp, self.context.i32_type(), "ge_ext")
-                    .unwrap()
-            }
-            BinaryOp::Lequa => {
-                let cmp = self
-                    .builder
-                    .build_int_compare(IntPredicate::SLE, left_val, right_val, "le")
-                    .unwrap();
-                self.builder
-                    .build_int_z_extend(cmp, self.context.i32_type(), "le_ext")
-                    .unwrap()
-            }
-
-            // Distancia: valor absoluto
-            BinaryOp::Dist => {
-                let sub = self
-                    .builder
-                    .build_int_sub(left_val, right_val, "dist_sub")
-                    .unwrap();
-                let zero = self.context.i32_type().const_int(0, false);
-
-                let is_negative = self
-                    .builder
-                    .build_int_compare(IntPredicate::SLT, sub, zero, "is_neg")
-                    .unwrap();
-
-                let neg_sub = self.builder.build_int_sub(zero, sub, "neg_sub").unwrap();
-
-                self.builder
-                    .build_select(is_negative, neg_sub, sub, "dist")
-                    .unwrap()
-                    .into_int_value()
-            }
-
-            // No implementados o nuevos en BinaryOp
-            BinaryOp::Pow => panic!("Pow no implementado"),
-            BinaryOp::And => panic!("And no implementado"),
-            BinaryOp::Or => panic!("Or no implementado"),
-            BinaryOp::Mod => panic!("Mod no implementado"),
+        let (instr, res_type) = match op {
+            BinaryOp::Add => (format!("{} = fadd double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Sub => (format!("{} = fsub double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Mul => (format!("{} = fmul double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Div => (format!("{} = fdiv double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Mod => {
+                // LLVM usa frem para el resto de punto flotante
+                (format!("{} = frem double {}, {}", res_reg, l.register, r.register), "double")
+            },
+            BinaryOp::Equal => (format!("{} = fcmp oeq double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Great => (format!("{} = fcmp ogt double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Less  => (format!("{} = fcmp olt double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Gequa => (format!("{} = fcmp oge double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Lequa => (format!("{} = fcmp ole double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Dist  => (format!("{} = fcmp une double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::And => (format!("{} = and i1 {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Or => (format!("{} = or i1 {}, {}", res_reg, l.register, r.register), "i1"),
+            _ => (format!("; TODO: Implement {:?} binop", op), "double"),
         };
 
-        result.into()
+        self.emit(instr);
+        GeneratorResult::new(res_reg, res_type.to_string())
     }
 
-    fn visit_bool(&mut self, b: bool) -> BasicValueEnum<'ctx> {
-        let val = if b { 1 } else { 0 };
-        self.context.i32_type().const_int(val, false).into()
-    }
-
-    fn visit_string(&mut self, s: &str) -> BasicValueEnum<'ctx> {
-        self.builder
-            .build_global_string_ptr(s, "str")
-            .unwrap()
-            .as_basic_value_enum()
-    }
-
-    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &TypedExpr) -> BasicValueEnum<'ctx> {
-        let val = expr.accept(self).into_int_value();
-
-        let result: IntValue = match op {
-            UnaryOp::Plus => val,
-            UnaryOp::Neg => self.builder.build_int_neg(val, "neg").unwrap(),
-            UnaryOp::Not => {
-                // Not lógico: si es 0 pasas a 1, si es != 0 pasas a 0.
-                let is_zero = self
-                    .builder
-                    .build_int_compare(
-                        IntPredicate::EQ,
-                        val,
-                        self.context.i32_type().const_int(0, false),
-                        "is_zero",
-                    )
-                    .unwrap();
-                self.builder
-                    .build_int_z_extend(is_zero, self.context.i32_type(), "not_ext")
-                    .unwrap()
-            }
-        };
-
-        result.into()
-    }
-
-    fn visit_let(&mut self, _node: &LetNode) -> BasicValueEnum<'ctx> {
-        todo!()
-    }
-
-    fn visit_if(&mut self, _node: &IfNode) -> BasicValueEnum<'ctx> {
-        todo!()
-    }
-
-    fn visit_while(&mut self, node: &WhileNode) -> BasicValueEnum<'ctx> {
-        
-        //FALTA TESTEO POR FALTA DE LET
-        let parent_func = self.builder.get_insert_block().unwrap().get_parent().unwrap();
-
-        // 1. Crear bloques para la condición, el cuerpo y la salida
-        let cond_bb = self.context.append_basic_block(parent_func, "while_cond");
-        let body_bb = self.context.append_basic_block(parent_func, "while_body");
-        let after_bb = self.context.append_basic_block(parent_func, "while_after");
-
-        // 2. Variable para almacenar el resultado (valor de la última iteración)
-        // Usamos un 'alloca' al inicio de la función (o en el bloque actual)
-        let result_ptr = self.builder.build_alloca(self.context.i32_type(), "while_result").unwrap();
-        // Inicializamos con 0 (o false) por si el bucle nunca se ejecuta
-        self.builder.build_store(result_ptr, self.context.i32_type().const_int(0, false)).unwrap();
-
-        // Salto inicial a la condición
-        self.builder.build_unconditional_branch(cond_bb).unwrap();
-
-        // 3. Bloque de la Condición
-        self.builder.position_at_end(cond_bb);
-        let cond_val = node.condition.accept(self).into_int_value();
-        
-        // El tipo Bool en HULK es i1 o i32(0/1). Si es i32, comparamos != 0
-        let is_true = self.builder.build_int_compare(
-            IntPredicate::NE, 
-            cond_val, 
-            self.context.i32_type().const_int(0, false), 
-            "is_true"
-        ).unwrap();
-
-        self.builder.build_conditional_branch(is_true, body_bb, after_bb).unwrap();
-
-        // 4. Bloque del Cuerpo
-        self.builder.position_at_end(body_bb);
-        let body_val = node.body.accept(self);
-        
-        // Guardamos el valor de esta iteración
-        if body_val.is_int_value() {
-            self.builder.build_store(result_ptr, body_val.into_int_value()).unwrap();
-        }
-
-        self.builder.build_unconditional_branch(cond_bb).unwrap();
-
-        // 5. Bloque de Salida
-        self.builder.position_at_end(after_bb);
-        
-        // Cargamos y retornamos el último valor guardado
-        self.builder.build_load(self.context.i32_type(), result_ptr, "final_result").unwrap().as_basic_value_enum()
-    }
-
-    fn visit_for(&mut self, _node: &ForNode) -> BasicValueEnum<'ctx> {
-        todo!()
-    }
-
-    fn visit_fun_call(&mut self, _node: &FunCallNode) -> BasicValueEnum<'ctx> {
-        todo!()
-    }
-
-    fn visit_dest_assign(&mut self, _node: &DestAssignNode) -> BasicValueEnum<'ctx> {
-        todo!()
-    }
-
-    fn visit_block(&mut self, node: &BlockNode) -> BasicValueEnum<'ctx> {
-        let mut last_value = self.context.i32_type().const_int(0, false).as_basic_value_enum();
-
+    fn visit_block(&mut self, node: &BlockNode) -> GeneratorResult {
+        let mut last_res = GeneratorResult::new("0.0".to_string(), "double".to_string());
+        self.push_scope(); // Un bloque también puede definir su propio scope
         for expr in &node.expressions {
-            last_value = expr.accept(self);
+            last_res = expr.accept(self);
+        }
+        self.pop_scope();
+        last_res
+    }
+
+    fn visit_while(&mut self, node: &WhileNode) -> GeneratorResult {
+        let cond_label = self.next_label("while_cond");
+        let body_label = self.next_label("while_body");
+        let end_label = self.next_label("while_end");
+        
+        let res_ptr = self.next_temp();
+        self.emit(format!("{} = alloca double", res_ptr));
+        self.emit(format!("store double 0.0, ptr {}", res_ptr));
+
+        self.emit(format!("br label %{}", cond_label));
+        self.emit_label(cond_label.clone());
+        let cond = node.condition.accept(self);
+        self.emit(format!("br i1 {}, label %{}", cond.register, body_label));
+        self.emit(format!("br label %{}", end_label));
+
+        self.emit_label(body_label);
+        let body_res = node.body.accept(self);
+        self.emit(format!("store double {}, ptr {}", body_res.register, res_ptr));
+        self.emit(format!("br label %{}", cond_label));
+
+        self.emit_label(end_label);
+        let final_val = self.next_temp();
+        self.emit(format!("{} = load double, ptr {}", final_val, res_ptr));
+        
+        GeneratorResult::new(final_val, "double".to_string())
+    }
+
+    fn visit_if(&mut self, node: &IfNode) -> GeneratorResult {
+        let then_label = self.next_label("if_then");
+        let else_label = self.next_label("if_else");
+        let merge_label = self.next_label("if_merge");
+        
+        let cond = node.condition.accept(self);
+        self.emit(format!("br i1 {}, label %{}, label %{}", cond.register, then_label, else_label));
+
+        self.emit_label(then_label.clone());
+        let then_res = node.if_branch.accept(self);
+        let actual_then_block = self.last_block_label();
+        self.emit(format!("br label %{}", merge_label));
+
+        self.emit_label(else_label.clone());
+        let else_res = node.else_branch.accept(self);
+        let actual_else_block = self.last_block_label();
+        self.emit(format!("br label %{}", merge_label));
+
+        self.emit_label(merge_label);
+        let res_reg = self.next_temp();
+        self.emit(format!("{} = phi {} [ {}, %{} ], [ {}, %{} ]", 
+            res_reg, then_res.llvm_type, 
+            then_res.register, actual_then_block,
+            else_res.register, actual_else_block
+        ));
+
+        GeneratorResult::new(res_reg, then_res.llvm_type)
+    }
+
+    fn visit_let(&mut self, node: &LetNode) -> GeneratorResult {
+        self.push_scope(); // Nuevo scope para la expresión LET
+        
+        for ((name_node, _hulk_type), expr) in &node.assignments {
+            let val = expr.accept(self);
+            if let Literal::Id(name) = &name_node.value {
+                // En LLVM manual, guardamos el valor en un puntero para permitir redifinición/shadowing simple
+                let ptr = self.next_temp();
+                self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
+                self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, ptr));
+                
+                // Registramos el puntero en la tabla de símbolos
+                self.define_variable(name.clone(), ptr, val.llvm_type);
+            }
+        }
+        
+        let res = node.body.accept(self);
+        self.pop_scope();
+        res
+    }
+
+    fn visit_id(&mut self, id: &str) -> GeneratorResult {
+        if let Some((ptr, ty)) = self.resolve_variable(id) {
+            let res_reg = self.next_temp();
+            self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr));
+            GeneratorResult::new(res_reg, ty)
+        } else {
+            // Si no se encuentra, retornamos 0.0 (esto debería ser capturado por el semántico)
+            GeneratorResult::new("0.0".to_string(), "double".to_string())
+        }
+    }
+
+    fn visit_dest_assign(&mut self, node: &DestAssignNode) -> GeneratorResult {
+        let val = node.expr.accept(self);
+        if let Literal::Id(name) = &node.identifier.value {
+            if let Some((ptr, ty)) = self.resolve_variable(name) {
+                // Destructive assignment: actualizamos el valor en la dirección de memoria existente
+                self.emit(format!("store {} {}, ptr {}", ty, val.register, ptr));
+                return val;
+            }
+        }
+        val
+    }
+
+    fn visit_fun_call(&mut self, node: &FunCallNode) -> GeneratorResult {
+        let mut args = Vec::new();
+        for arg_expr in &node.args {
+            args.push(arg_expr.accept(self));
         }
 
-        last_value
+        if let Literal::Id(name) = &node.name.value {
+            // HULK builtin: print
+            if name == "print" {
+                // Implementación simple de print (requiere declaración externa de printf o similar)
+                // Por ahora emitimos un comentario de placeholder
+                self.emit(format!("; call to print with {:?}", args));
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+
+            let res_reg = self.next_temp();
+            let arg_strings: Vec<String> = args.iter()
+                .map(|a| format!("{} {}", a.llvm_type, a.register))
+                .collect();
+            
+            self.emit(format!("{} = call double @{}({})", res_reg, name, arg_strings.join(", ")));
+            return GeneratorResult::new(res_reg, "double".to_string());
+        }
+        
+        GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
-    
-    fn visit_id(&mut self, id: &str) -> BasicValueEnum<'ctx> {
-        todo!()
+
+    fn visit_for(&mut self, node: &ForNode) -> GeneratorResult {
+        // Un bucle FOR en HULK suele ser: for (x in range(a, b)) body
+        // Esto es azúcar sintáctico para un mientras o similar.
+        // Implementación básica usando la variable de iteración.
+        
+        let start_res = node.iterator.accept(self); // Suponemos que retorna el inicio del rango o similar
+        
+        let loop_cond = self.next_label("for_cond");
+        let loop_body = self.next_label("for_body");
+        let loop_end = self.next_label("for_end");
+
+        self.push_scope();
+        if let Literal::Id(name) = &node.variable.value {
+            let ptr = self.next_temp();
+            self.emit(format!("{} = alloca double", ptr));
+            self.emit(format!("store double {}, ptr {}", start_res.register, ptr));
+            self.define_variable(name.clone(), ptr, "double".to_string());
+        }
+
+        self.emit_label(loop_cond.clone());
+        // Aquí faltaría la lógica de comparación con el límite superior del range,
+        // por simplicidad saltamos al cuerpo.
+        self.emit(format!("br label %{}", loop_body));
+
+        self.emit_label(loop_body);
+        let body_res = node.body.accept(self);
+        self.emit(format!("br label %{}", loop_cond));
+
+        self.emit_label(loop_end);
+        self.pop_scope();
+        
+        body_res
+    }
+
+    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &TypedExpr) -> GeneratorResult {
+        let val = expr.accept(self);
+        let res_reg = self.next_temp();
+        let (instr, res_ty) = match op {
+            UnaryOp::Not => (format!("{} = xor i1 {}, 1", res_reg, val.register), "i1"),
+            UnaryOp::Neg => (format!("{} = fneg double {}", res_reg, val.register), "double"),
+            UnaryOp::Plus => (format!("{} = fadd double 0.0, {}", res_reg, val.register), "double"),
+        };
+        self.emit(instr);
+        GeneratorResult::new(res_reg, res_ty.to_string())
+    }
+
+    fn visit_string(&mut self, s: &str) -> GeneratorResult {
+        // Placeholder para strings (requiere manejo de constantes globales)
+        self.emit(format!("; string literal: {:?}", s));
+        GeneratorResult::new("null".to_string(), "ptr".to_string())
     }
 }

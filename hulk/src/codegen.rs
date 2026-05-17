@@ -1,186 +1,139 @@
-use inkwell::OptimizationLevel;
-use inkwell::builder::Builder;
-use inkwell::context::Context;
-use inkwell::module::Module;
-use inkwell::targets::{InitializationConfig, Target};
 use std::fs;
-use std::io;
-
 use crate::nodes::block_node::BlockNode;
 use crate::nodes::program_node::{Program, Statement};
 use crate::nodes::typedexpr_node::{Expr, TypedExpr};
 
-
-
-pub struct CodeGenerator<'ctx> {
-    pub context: &'ctx Context,
-    pub module: Module<'ctx>,
-    pub builder: Builder<'ctx>,
+/// Representa el resultado de una expresión en LLVM IR.
+#[derive(Debug, Clone)]
+pub struct GeneratorResult {
+    pub register: String,   
+    pub llvm_type: String, 
 }
 
-impl<'ctx> CodeGenerator<'ctx> {
-    pub fn new(context: &'ctx Context, module_name: &str) -> Self {
-        let module = context.create_module(module_name);
-        let builder = context.create_builder();
-
-        CodeGenerator {
-            context,
-            module,
-            builder,
-        }
-    }
-
-    /// Guarda el IR en un archivo .ll
-    pub fn save_ir(&self, filename: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let ir_string = self.module.print_to_string().to_string();
-        fs::write(filename, ir_string)?;
-        println!("IR guardado en: {}", filename);
-        Ok(())
-    }
-
-    /// Compila el módulo a ejecutable usando JIT
-    pub fn compile_and_execute(&self) -> Result<i32, Box<dyn std::error::Error>> {
-         
-        let execution_engine = self
-            .module
-            .create_jit_execution_engine(OptimizationLevel::Aggressive)?;
-
-        unsafe {
-            // Busca la función main
-            let main_function =
-                execution_engine.get_function::<unsafe extern "C" fn() -> i32>("main")?;
-            let result = main_function.call();
-            Ok(result)
-        }
-    }
-
-    /// Compila a LLVM IR y genera un objeto (.o)
-    pub fn compile_to_object(&self, output_file: &str) -> Result<(), Box<dyn std::error::Error>> {
-         
-        Target::initialize_native(&InitializationConfig::default())?;
-
-         
-        let triple = inkwell::targets::TargetMachine::get_default_triple();
-        self.module.set_triple(&triple);
-
-        
-        let target = Target::from_triple(&triple)?;
-
-         
-        let target_machine = target
-            .create_target_machine(
-                &triple,
-                "generic",
-                "",
-                OptimizationLevel::Aggressive,
-                inkwell::targets::RelocMode::Default,
-                inkwell::targets::CodeModel::Default,
-            )
-            .expect("No se pudo crear la target machine");
-
-        
-        target_machine.write_to_file(
-            &self.module,
-            inkwell::targets::FileType::Object,
-            output_file.as_ref(),
-        )?;
-        println!("Archivo objeto guardado en: {}", output_file);
-        Ok(())
-    }
-
-     
-    pub fn get_module(&self) -> &Module<'ctx> {
-        &self.module
-    }
-
-    
-    pub fn get_builder(&self) -> &Builder<'ctx> {
-        &self.builder
-    }
-
-     
-    pub fn get_context(&self) -> &'ctx Context {
-        self.context
+impl GeneratorResult {
+    pub fn new(register: String, llvm_type: String) -> Self {
+        Self { register, llvm_type }
     }
 }
 
-// pub fn generate_ir_and_execute(
-//     ast: &TypedExpr,
-//     module_name: &str,
-//     ir_output: Option<&str>,
-// ) -> Result<i32, Box<dyn std::error::Error>> {
-//     Target::initialize_native(&InitializationConfig::default())
-//         .map_err(|e| Box::<dyn std::error::Error>::from(io::Error::new(io::ErrorKind::Other, e)))?;
+pub struct CodeGenerator {
+    pub code: Vec<String>,       
+    pub temp_counter: usize,      
+    pub label_counter: usize,     
+    /// Tabla de símbolos para manejar scopes: mapea nombre de variable a (registro LLVM, tipo LLVM)
+    pub scopes: Vec<std::collections::HashMap<String, (String, String)>>,
+}
 
-//     let context = Context::create();
-//     let mut code_gen = CodeGenerator::new(&context, module_name);
+impl CodeGenerator {
+    pub fn new() -> Self {
+        Self {
+            code: Vec::new(),
+            temp_counter: 0,
+            label_counter: 0,
+            scopes: vec![std::collections::HashMap::new()], // Scope inicial
+        }
+    }
 
-//     let i32_type = context.i32_type();
-//     let fn_type = i32_type.fn_type(&[], false);
-//     let function = code_gen.module.add_function("main", fn_type, None);
-//     let basic_block = context.append_basic_block(function, "entry");
-//     code_gen.builder.position_at_end(basic_block);
+    /// Entra en un nuevo scope
+    pub fn push_scope(&mut self) {
+        self.scopes.push(std::collections::HashMap::new());
+    }
 
-//     let result = ast.accept(&mut code_gen);
-//     code_gen.builder.build_return(Some(&result))?;
+    /// Sale del scope actual
+    pub fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
 
-//     if let Some(path) = ir_output {
-//         code_gen.save_ir(path)?;
-//     }
+    /// Define una variable en el scope actual
+    pub fn define_variable(&mut self, name: String, register: String, ty: String) {
+        if let Some(current_scope) = self.scopes.last_mut() {
+            current_scope.insert(name, (register, ty));
+        }
+    }
 
-//     code_gen.compile_and_execute()
-// }
+    /// Busca una variable desde el scope más interno al más externo
+    pub fn resolve_variable(&self, name: &str) -> Option<(String, String)> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(res) = scope.get(name) {
+                return Some(res.clone());
+            }
+        }
+        None
+    }
+
+    pub fn next_temp(&mut self) -> String {
+        let name = format!("%t{}", self.temp_counter);
+        self.temp_counter += 1;
+        name
+    }
+
+    pub fn next_label(&mut self, prefix: &str) -> String {
+        let label = format!("{}_{}", prefix, self.label_counter);
+        self.label_counter += 1;
+        label
+    }
+
+    pub fn emit(&mut self, instr: String) {
+        self.code.push(format!("  {}", instr));
+    }
+
+    pub fn emit_label(&mut self, label: String) {
+        self.code.push(format!("{}:", label));
+    }
+
+    /// Retorna el nombre de la última etiqueta emitida (sin los dos puntos).
+    pub fn last_block_label(&self) -> String {
+        for line in self.code.iter().rev() {
+            if line.ends_with(':') {
+                return line[..line.len()-1].to_string();
+            }
+        }
+        "entry".to_string()
+    }
+}
 
 pub fn compile_hulk_program(
     program: Program,
-    module_name: &str,
+    _module_name: &str, 
     ir_output: Option<&str>,
-) -> Result<i32, Box<dyn std::error::Error>> {
-    // 1. Inicializar LLVM
-    Target::initialize_native(&InitializationConfig::default())
-        .map_err(|e| Box::<dyn std::error::Error>::from(io::Error::new(io::ErrorKind::Other, e)))?;
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut generator = CodeGenerator::new();
 
-    let context = Context::create();
-    let mut code_gen = CodeGenerator::new(&context, module_name);
+    let mut final_code = Vec::new();
+    final_code.push("; ModuleID = 'hulk'".to_string());
+    final_code.push("target triple = 'x86_64-pc-linux-gnu'".to_string());
+    final_code.push("".to_string());
 
-    // 2. Preparar el punto de entrada 'main'
-    let i32_type = context.i32_type();
-    let fn_type = i32_type.fn_type(&[], false);
-    let function = code_gen.module.add_function("main", fn_type, None);
-    let basic_block = context.append_basic_block(function, "entry");
-    code_gen.builder.position_at_end(basic_block);
+    generator.code.push("define i32 @main() {".to_string());
+    generator.code.push("entry:".to_string());
 
-    // 3. Convertir el programa en un bloque ejecutable
-    // Separamos declaraciones de funciones de las expresiones top-level
     let mut expressions = Vec::new();
     for stmt in program.statements {
         match stmt {
             Statement::Expression(expr) => expressions.push(expr),
-            Statement::FunctionDecl(_decl) => {
-                // TODO: Implementar registro de funciones globales en el módulo
-            }
+            Statement::FunctionDecl(_decl) => {}
         }
     }
 
-    // Envolvemos todo en un bloque para reusar visit_block y obtener el último valor
     let top_level_block = TypedExpr::new(Expr::Block(BlockNode::new(expressions)));
-    
-    // 4. Generar el IR
-    let result = top_level_block.accept(&mut code_gen);
-    
-    // Aseguramos que el retorno sea i32 (booleano o número en tu sistema actual)
-    let return_val = if result.is_int_value() {
-        result.into_int_value()
+    let result = top_level_block.accept(&mut generator);
+
+    if result.llvm_type == "i1" {
+        let ret_reg = generator.next_temp();
+        generator.emit(format!("{} = zext i1 {} to i32", ret_reg, result.register));
+        generator.emit(format!("ret i32 {}", ret_reg));
     } else {
-        context.i32_type().const_int(0, false)
-    };
-
-    code_gen.builder.build_return(Some(&return_val)).unwrap();
-
-    // 5. Opcionales y ejecución
-    if let Some(path) = ir_output {
-        code_gen.save_ir(path)?;
+        generator.emit("ret i32 0".to_string());
     }
 
-    code_gen.compile_and_execute()
+    generator.code.push("}".to_string());
+
+    final_code.extend(generator.code);
+    let full_ir = final_code.join("\n");
+
+    if let Some(path) = ir_output {
+        fs::write(path, &full_ir)?;
+    }
+
+    Ok(full_ir)
 }
