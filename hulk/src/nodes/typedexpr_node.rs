@@ -1,4 +1,4 @@
-use crate::{expr_visitor::ExprVisitor, nodes::{binaryop_node::BinaryOpNode, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, let_node::LetNode, literal_node::{Literal, LiteralNode}, unaryop_node::UnaryOpNode, while_node::WhileNode}};
+use crate::{expr_visitor::ExprVisitor, nodes::{binaryop_node::BinaryOpNode, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, literal_node::{Literal, LiteralNode}, member_access_node::{MemberAccessNode, MethodCallNode}, unaryop_node::UnaryOpNode, while_node::WhileNode}};
 
 
 
@@ -8,6 +8,7 @@ pub enum HulkType {
     Number,
     Bool,
     String,
+    Class(String),
     Unknown,
 }
 
@@ -24,6 +25,9 @@ pub enum Expr {
     Unary(UnaryOpNode),
     Literal(LiteralNode),
     Block(BlockNode),
+    Instantiation(InstantiationNode),
+    MemberAccess(MemberAccessNode),
+    MethodCall(MethodCallNode),
 }
 
 
@@ -68,6 +72,9 @@ impl TypedExpr {
             Expr::FunCall(node) => v.visit_fun_call(node),
             Expr::DestAssign(node) => v.visit_dest_assign(node),
             Expr::Block(node) => v.visit_block(node),
+            Expr::Instantiation(node) => v.visit_instantiation(node),
+            Expr::MemberAccess(node) => v.visit_member_access(node),
+            Expr::MethodCall(node) => v.visit_method_call(node),
         }
     }
 }

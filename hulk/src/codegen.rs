@@ -112,6 +112,7 @@ pub fn compile_hulk_program(
         match stmt {
             Statement::Expression(expr) => expressions.push(expr),
             Statement::FunctionDecl(_decl) => {}
+            Statement::TypeDecl(type_decl_node) => todo!(),
         }
     }
 

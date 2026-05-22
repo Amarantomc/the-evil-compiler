@@ -58,7 +58,7 @@ impl SemanticChecker {
                 Statement::FunctionDecl(decl) => {
                     // Guardar variables antiguas (clonamos para scope simple, podría usarse una pila de scopes)
                     let old_vars = self.env.variables.clone();
-                    
+    
                     for (p_name, p_type) in &decl.params {
                         if let Literal::Id(ref id) = p_name.value {
                             self.env.variables.insert(id.clone(), p_type.clone());
@@ -67,7 +67,7 @@ impl SemanticChecker {
 
                     // Chequear el cuerpo
                     let inferred_type = decl.body.accept(self);
-                    
+    
                     // Actualizar el tipo de retorno inferido en la función
                     if let Literal::Id(ref name) = decl.name.value {
                         if let Some(func) = self.env.functions.get_mut(name) {
@@ -81,6 +81,7 @@ impl SemanticChecker {
                 Statement::Expression(expr) => {
                     expr.return_type = expr.accept(self);
                 }
+Statement::TypeDecl(type_decl_node) => todo!(),
             }
         }
     }
@@ -226,5 +227,17 @@ impl ExprVisitor<HulkType> for SemanticChecker {
             last_type = expr.accept(self);
         }
         last_type
+    }
+    
+    fn visit_instantiation(&mut self, node: &crate::nodes::instantiation_node::InstantiationNode) -> HulkType {
+        todo!()
+    }
+    
+    fn visit_member_access(&mut self, node: &crate::nodes::member_access_node::MemberAccessNode) -> HulkType {
+        todo!()
+    }
+    
+    fn visit_method_call(&mut self, node: &crate::nodes::member_access_node::MethodCallNode) -> HulkType {
+        todo!()
     }
 }

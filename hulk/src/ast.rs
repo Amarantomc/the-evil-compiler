@@ -14,6 +14,7 @@ impl Program {
 #[derive(Debug)]
 pub enum Statement {
     FunctionDecl(FunctionDecl),
+    TypeDecl(TypeDeclNode),
     Expression(TypedExpr),
 }
 
@@ -35,6 +36,7 @@ pub enum HulkType {
     Number,
     Bool,
     String,
+    Class(String),
     Unknown,
 }
 
@@ -75,6 +77,9 @@ impl TypedExpr {
             Expr::FunCall(node) => v.visit_fun_call(node),
             Expr::DestAssign(node) => v.visit_dest_assign(node),
             Expr::Block(node) => v.visit_block(node),
+            Expr::Instantiation(node) => v.visit_instantiation(node),
+            Expr::MemberAccess(node) => v.visit_member_access(node),
+            Expr::MethodCall(node) => v.visit_method_call(node),
         }
     }
 }
@@ -92,6 +97,38 @@ pub enum Expr {
     Unary(UnaryOpNode),
     Literal(LiteralNode),
     Block(BlockNode),
+    Instantiation(InstantiationNode),
+    MemberAccess(MemberAccessNode),
+    MethodCall(MethodCallNode),
+}
+
+#[derive(Debug)]
+pub struct MemberAccessNode {
+    pub instance: Box<TypedExpr>,
+    pub member: LiteralNode,
+}
+
+#[derive(Debug)]
+pub struct MethodCallNode {
+    pub instance: Box<TypedExpr>,
+    pub call: FunCallNode,
+}
+
+pub type InstantiationNode = FunCallNode;
+
+#[derive(Debug)]
+pub struct TypeDeclNode {
+    pub name: LiteralNode,
+    pub params: Vec<(LiteralNode, HulkType)>,
+    pub attributes: Vec<AttributeNode>,
+    pub methods: Vec<FunctionDecl>,
+}
+
+#[derive(Debug)]
+pub struct AttributeNode {
+    pub name: LiteralNode,
+    pub type_annotation: HulkType,
+    pub initializer: TypedExpr,
 }
 
 #[derive(Debug)]
