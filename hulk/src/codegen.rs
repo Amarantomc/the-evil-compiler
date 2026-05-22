@@ -132,6 +132,7 @@ pub fn compile_hulk_program(
     final_code.extend(generator.code);
     let full_ir = final_code.join("\n");
 
+    // 5. Opcionales y ejecución
     if let Some(path) = ir_output {
         fs::write(path, &full_ir)?;
     }
