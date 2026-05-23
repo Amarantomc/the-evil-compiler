@@ -34,7 +34,8 @@ fn main() {
 
     setX(x) => self.x := x;
     setY(y) => self.y := y;
-}";
+}
+    let p : Point = new Point() in p.getX() + p.getY() ;";
 
     // 2. Parsear el código para obtener el AST
     let parser = grammar::ProgramParser::new();
@@ -61,12 +62,12 @@ fn main() {
         println!("Chequeo semántico exitoso. El programa es válido.");
         // Opcional: imprimir el AST procesado
          println!("{:#?}", program);
-        // match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
-        //     Ok(res) => {
-        //         println!("LLVM IR generado exitosamente.");
-        //         // println!("Resultado IR:\n{}", res);
-        //     },
-        //     Err(e) => eprintln!("Error generando IR: {}", e),
-        // }
+            match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
+                Ok(res) => {
+                    println!("LLVM IR generado exitosamente.");
+                    // println!("Resultado IR:\n{}", res);
+                },
+                Err(e) => eprintln!("Error generando IR: {}", e),
+            }
     }
 //}

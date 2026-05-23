@@ -277,6 +277,7 @@ Term: TypedExpr = {
     },
     <FunCall> => TypedExpr::new(Expr::FunCall(<>)),
     "(" <ExprRule> ")" ,
+    "self" => TypedExpr::new(Expr::SelfRef),
     <id: Ident> => TypedExpr::new(Expr::Literal(id))
 };
 
