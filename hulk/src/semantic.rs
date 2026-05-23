@@ -240,4 +240,8 @@ impl ExprVisitor<HulkType> for SemanticChecker {
     fn visit_method_call(&mut self, node: &crate::nodes::member_access_node::MethodCallNode) -> HulkType {
         todo!()
     }
+    
+    fn visit_self(&mut self) -> HulkType {
+        todo!()
+    }
 }

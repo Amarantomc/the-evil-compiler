@@ -33,7 +33,6 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             BinaryOp::Mul => (format!("{} = fmul double {}, {}", res_reg, l.register, r.register), "double"),
             BinaryOp::Div => (format!("{} = fdiv double {}, {}", res_reg, l.register, r.register), "double"),
             BinaryOp::Mod => {
-                // LLVM usa frem para el resto de punto flotante
                 (format!("{} = frem double {}, {}", res_reg, l.register, r.register), "double")
             },
             BinaryOp::Equal => (format!("{} = fcmp oeq double {}, {}", res_reg, l.register, r.register), "i1"),
@@ -53,7 +52,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
     fn visit_block(&mut self, node: &BlockNode) -> GeneratorResult {
         let mut last_res = GeneratorResult::new("0.0".to_string(), "double".to_string());
-        self.push_scope(); // Un bloque también puede definir su propio scope
+        self.push_scope();
         for expr in &node.expressions {
             last_res = expr.accept(self);
         }
@@ -118,17 +117,14 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     }
 
     fn visit_let(&mut self, node: &LetNode) -> GeneratorResult {
-        self.push_scope(); // Nuevo scope para la expresión LET
+        self.push_scope();
         
         for ((name_node, _hulk_type), expr) in &node.assignments {
             let val = expr.accept(self);
             if let Literal::Id(name) = &name_node.value {
-                // En LLVM manual, guardamos el valor en un puntero para permitir redifinición/shadowing simple
                 let ptr = self.next_temp();
                 self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
                 self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, ptr));
-                
-                // Registramos el puntero en la tabla de símbolos
                 self.define_variable(name.clone(), ptr, val.llvm_type);
             }
         }
@@ -144,24 +140,74 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr));
             GeneratorResult::new(res_reg, ty)
         } else {
-            // Si no se encuentra, retornamos 0.0 (esto debería ser capturado por el semántico)
             GeneratorResult::new("0.0".to_string(), "double".to_string())
         }
     }
 
+    /// Carga el puntero de la instancia actual (`self`) desde la tabla de símbolos.
+    /// En la convención adoptada, el generador almacena el puntero bajo la clave "%self".
+    fn visit_self(&mut self) -> GeneratorResult {
+        if let Some((ptr, ty)) = self.resolve_variable("%self") {
+            // let res_reg = self.next_temp();
+            // self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr));
+            GeneratorResult::new(ptr, ty)
+        } else {
+            // `self` fuera de un método: el semántico ya debería haber reportado error.
+            self.emit("; ERROR: 'self' usado fuera de contexto de método".to_string());
+            GeneratorResult::new("null".to_string(), "ptr".to_string())
+        }
+    }
+
     fn visit_dest_assign(&mut self, node: &DestAssignNode) -> GeneratorResult {
+        use crate::nodes::typedexpr_node::Expr;
+
         let val = node.expr.accept(self);
-        // FIXME: Handle member access assignment like self.x := 5
-        /*
-        if let Literal::Id(name) = &node.identifier.value {
-            if let Some((ptr, ty)) = self.resolve_variable(name) {
-                // Destructive assignment: actualizamos el valor en la dirección de memoria existente
-                self.emit(format!("store {} {}, ptr {}", ty, val.register, ptr));
-                return val;
+
+        match &node.target.kind {
+            // Asignación a un identificador local: x := expr
+            Expr::Literal(lit_node) => {
+                if let Literal::Id(name) = &lit_node.value {
+                    if let Some((ptr, ty)) = self.resolve_variable(name) {
+                        self.emit(format!("store {} {}, ptr {}", ty, val.register, ptr));
+                    } else {
+                        self.emit(format!("; ERROR: variable '{}' no declarada en dest-assign", name));
+                    }
+                }
+                val
+            }
+            // Asignación a atributo de instancia: self.attr := expr  o  inst.attr := expr
+            Expr::MemberAccess(access) => {
+                let inst_res = access.instance.accept(self);
+                if let Literal::Id(field_name) = &access.member.value {
+                    // Obtenemos el puntero al campo dentro del struct LLVM.
+                    // Convención: el struct layout se conoce en tiempo de compilación;
+                    // aquí emitimos un GEP canónico. El índice real se resuelve en una
+                    // fase de layout (pendiente); usamos un comentario hasta entonces.
+                    let field_ptr = self.next_temp();
+                    self.emit(format!(
+                        "; GEP para campo '{}' sobre instancia {}",
+                        field_name, inst_res.register
+                    ));
+                    
+                    let index=self.get_field_index(&inst_res.llvm_type, field_name);
+                    self.emit(format!(
+                        "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {} ; campo {}",
+                        field_ptr,inst_res.llvm_type, inst_res.register, index,field_name
+                    ));
+                    self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, field_ptr));
+                }
+                val
+            }
+            // self := ... está prohibido por la especificación; el semántico lo rechaza.
+            Expr::SelfRef => {
+                self.emit("; ERROR semántico: 'self' no es un target válido de asignación".to_string());
+                val
+            }
+            _ => {
+                self.emit("; ERROR: target de asignación no válido".to_string());
+                val
             }
         }
-        */
-        val
     }
 
     fn visit_fun_call(&mut self, node: &FunCallNode) -> GeneratorResult {
@@ -171,10 +217,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         }
 
         if let Literal::Id(name) = &node.name.value {
-            // HULK builtin: print
             if name == "print" {
-                // Implementación simple de print (requiere declaración externa de printf o similar)
-                // Por ahora emitimos un comentario de placeholder
                 self.emit(format!("; call to print with {:?}", args));
                 return GeneratorResult::new("0.0".to_string(), "double".to_string());
             }
@@ -192,15 +235,11 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     }
 
     fn visit_for(&mut self, node: &ForNode) -> GeneratorResult {
-        // Un bucle FOR en HULK suele ser: for (x in range(a, b)) body
-        // Esto es azúcar sintáctico para un mientras o similar.
-        // Implementación básica usando la variable de iteración.
-        
-        let start_res = node.iterator.accept(self); // Suponemos que retorna el inicio del rango o similar
+        let start_res = node.iterator.accept(self);
         
         let loop_cond = self.next_label("for_cond");
         let loop_body = self.next_label("for_body");
-        let loop_end = self.next_label("for_end");
+        let loop_end  = self.next_label("for_end");
 
         self.push_scope();
         if let Literal::Id(name) = &node.variable.value {
@@ -211,8 +250,6 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         }
 
         self.emit_label(loop_cond.clone());
-        // Aquí faltaría la lógica de comparación con el límite superior del range,
-        // por simplicidad saltamos al cuerpo.
         self.emit(format!("br label %{}", loop_body));
 
         self.emit_label(loop_body);
@@ -238,20 +275,109 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     }
 
     fn visit_string(&mut self, s: &str) -> GeneratorResult {
-        // Placeholder para strings (requiere manejo de constantes globales)
         self.emit(format!("; string literal: {:?}", s));
         GeneratorResult::new("null".to_string(), "ptr".to_string())
     }
     
+    /// Genera una llamada a `new <TypeName>(args)`.
+    ///
+    /// Convención de ABI adoptada:
+    ///   - Cada tipo `T` genera una función `@T_new(args...) -> ptr` que
+    ///     aloca el struct, inicializa los campos y devuelve el puntero.
+    ///   - El codegen simplemente emite la llamada; la función la generará
+    ///     la pasada de TypeDecl (pendiente de implementar).
     fn visit_instantiation(&mut self, node: &crate::nodes::instantiation_node::InstantiationNode) -> GeneratorResult {
-        todo!()
+        let mut args = Vec::new();
+        for arg_expr in &node.args {
+            args.push(arg_expr.accept(self));
+        }
+
+        if let Literal::Id(type_name) = &node.name.value {
+            let res_reg = self.next_temp();
+            let arg_strings: Vec<String> = args.iter()
+                .map(|a| format!("{} {}", a.llvm_type, a.register))
+                .collect();
+
+            // Llamada a la función constructora generada para el tipo.
+            self.emit(format!(
+                "{} = call ptr @{}_new({})",
+                res_reg, type_name, arg_strings.join(", ")
+            ));
+            return GeneratorResult::new(res_reg, "ptr".to_string());
+        }
+
+        GeneratorResult::new("null".to_string(), "ptr".to_string())
     }
     
+    /// Lee el valor de un atributo de una instancia.
+    ///
+    /// Emite un `getelementptr` seguido de un `load`. El índice del campo
+    /// dentro del struct se obtiene del `struct_layout` almacenado en el
+    /// `CodeGenerator` (campo agregado junto a esta implementación).
     fn visit_member_access(&mut self, node: &crate::nodes::member_access_node::MemberAccessNode) -> GeneratorResult {
-        todo!()
+        let inst_res = node.instance.accept(self);
+        print!("{:?}\n", inst_res);
+        print!("{:?}\n", self.struct_layout);
+        print!("{:?}\n", self.current_type_context);
+        if let Literal::Id(field_name) = &node.member.value {
+            let field_index = self.get_field_index(&inst_res.llvm_type, field_name);
+            let field_ptr   = self.next_temp();
+            let field_val   = self.next_temp();
+
+            self.emit(format!(
+                "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {}",
+                field_ptr, inst_res.llvm_type, inst_res.register, field_index
+            ));
+            self.emit(format!(
+                "{} = load double, ptr {}",
+                field_val, field_ptr
+            ));
+
+            return GeneratorResult::new(field_val, "double".to_string());
+        }
+
+        GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
     
+    /// Emite una llamada a un método de instancia.
+    ///
+    /// Convención de ABI adoptada:
+    ///   - El método `m` del tipo `T` se compila como `@T_m(ptr %self, args...) -> <ret>`.
+    ///   - El `CodeGenerator` necesita el tipo de la instancia para resolver el nombre;
+    ///     como en esta etapa el tipo vive en `inst_res.llvm_type` como `%T` (nombre LLVM
+    ///     del struct), extraemos el nombre del tipo de ahí.
     fn visit_method_call(&mut self, node: &crate::nodes::member_access_node::MethodCallNode) -> GeneratorResult {
-        todo!()
+        // Evaluar la instancia (receiver)
+        let inst_res = node.instance.accept(self);
+        print!("{:?}\n", inst_res);
+        // Evaluar argumentos
+        let mut arg_results = Vec::new();
+        for arg_expr in &node.call.args {
+            arg_results.push(arg_expr.accept(self));
+        }
+
+        if let Literal::Id(method_name) = &node.call.name.value {
+            let res_reg = self.next_temp();
+
+            // Construir lista de argumentos: self primero, luego los demás
+            let mut arg_strings = vec![format!("ptr {}", inst_res.register)];
+            arg_strings.extend(arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register)));
+
+            // Derivar el nombre del tipo a partir del tipo LLVM de la instancia.
+            // Si el tipo es "ptr" (objeto opaco) usamos el contexto del método.
+            // La fase de layout completa reemplazará esta heurística.
+            let type_name = self.current_type_context
+                .clone()
+                .unwrap_or_else(|| "Unknown".to_string());
+
+            self.emit(format!(
+                "{} = call double @{}_{}({})",
+                res_reg, type_name, method_name, arg_strings.join(", ")
+            ));
+
+            return GeneratorResult::new(res_reg, "double".to_string());
+        }
+
+        GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
 }

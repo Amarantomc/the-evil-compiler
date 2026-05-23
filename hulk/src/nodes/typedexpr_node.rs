@@ -28,6 +28,7 @@ pub enum Expr {
     Instantiation(InstantiationNode),
     MemberAccess(MemberAccessNode),
     MethodCall(MethodCallNode),
+    SelfRef,
 }
 
 
@@ -63,6 +64,7 @@ impl TypedExpr {
                 Literal::Str(s) => v.visit_string(s),
                 Literal::Id(id) => v.visit_id(id),
             },
+            Expr::SelfRef => v.visit_self(),
             Expr::Binary(node) => v.visit_binary_op(&node.left, &node.op, &node.right),
             Expr::Unary(node) => v.visit_unary_op(&node.op, &node.expr),
             Expr::Let(node) => v.visit_let(node),
