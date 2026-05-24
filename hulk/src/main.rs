@@ -25,17 +25,7 @@ pub  mod  nodes{
     pub mod instantiation_node;
 }
 fn main() {
-    let input = "type Point {
-    x = 0;
-    y = 0;
-
-    getX() => self.x;
-    getY() => self.y;
-
-    setX(x) => self.x := x;
-    setY(y) => self.y := y;
-}
-    let p : Point = new Point() in p.getX() + p.getY() ;";
+    let input = "print(\"Me cago en Ronald\");";
 
     // 2. Parsear el código para obtener el AST
     let parser = grammar::ProgramParser::new();
