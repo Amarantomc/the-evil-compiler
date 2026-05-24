@@ -7,7 +7,7 @@ use crate::nodes::for_node::ForNode;
 use crate::nodes::funcall_node::FunCallNode;
 use crate::nodes::if_node::IfNode;
 use crate::nodes::let_node::LetNode;
-use crate::nodes::typedexpr_node::TypedExpr;
+use crate::nodes::typedexpr_node::{HulkType, TypedExpr};
 use crate::nodes::unaryop_node::UnaryOp;
 use crate::nodes::while_node::WhileNode;
 use crate::nodes::literal_node::Literal;
@@ -123,13 +123,25 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             let val = expr.accept(self);
             if let Literal::Id(name) = &name_node.value {
                 let ptr = self.next_temp();
-                self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
+                match &_hulk_type {
+                    HulkType::Class(class_name) => {
+                        self.emit(format!("{} = alloca {}", ptr, "ptr"));
+                        self.emit(format!("store {} {}, ptr {}", "ptr", val.register, ptr));
+                        
+                    }
+                    _=> {
+                        self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
                 self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, ptr));
-                self.define_variable(name.clone(), ptr, val.llvm_type);
+                    }
+                }
+                
+                
+                self.define_variable(name.clone(), ptr,val.llvm_type );
             }
         }
         
         let res = node.body.accept(self);
+        print!("{:?}\n", self.scopes);
         self.pop_scope();
         res
     }
@@ -137,7 +149,12 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     fn visit_id(&mut self, id: &str) -> GeneratorResult {
         if let Some((ptr, ty)) = self.resolve_variable(id) {
             let res_reg = self.next_temp();
-            self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr));
+            match ty.as_str() {
+                "double" | "i1" => self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr)),
+                _ => self.emit(format!("{} = load ptr, ptr {}", res_reg, ptr)),
+                
+            }
+            //self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr));
             GeneratorResult::new(res_reg, ty)
         } else {
             GeneratorResult::new("0.0".to_string(), "double".to_string())
@@ -218,8 +235,31 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
         if let Literal::Id(name) = &node.name.value {
             if name == "print" {
-                self.emit(format!("; call to print with {:?}", args));
-                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+              // Verificamos si se pasó algún argumento
+              if let Some(arg) = args.first() {
+                let res_reg = self.next_temp();
+
+                match arg.llvm_type.as_str() {
+                    "double" => {
+                        self.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_double, double {})", res_reg, arg.register));
+                    },
+                    "ptr" => {
+                        // Asumimos que el puntero es una cadena de texto
+                        self.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", res_reg, arg.register));
+                    },
+                    "i1" => {
+                        // Usamos `select` de LLVM para elegir la cadena "true" o "false" basada en el valor del booleano
+                        let str_ptr = self.next_temp();
+                        self.emit(format!("{} = select i1 {}, ptr @.str_true, ptr @.str_false", str_ptr, arg.register));
+                        self.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", res_reg, str_ptr));
+                    },
+                    _ => {
+                        self.emit(format!("; ERROR: tipo no soportado para print: {}", arg.llvm_type));
+                    }
+                }
+            }
+            // Retornamos 0.0 por defecto para que las expresiones sigan funcionando
+            return GeneratorResult::new("0.0".to_string(), "double".to_string());
             }
 
             let res_reg = self.next_temp();
@@ -275,8 +315,28 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     }
 
     fn visit_string(&mut self, s: &str) -> GeneratorResult {
-        self.emit(format!("; string literal: {:?}", s));
-        GeneratorResult::new("null".to_string(), "ptr".to_string())
+        // 1. Generamos un nombre único para la constante global
+        let global_name = format!("@.str.{}", self.temp_counter);
+        self.temp_counter += 1;
+
+        // 2. Calculamos la longitud en bytes + 1 (por el terminador nulo \00)
+        // Ojo: Esto asume ASCII/UTF-8 simple. Si 's' tiene caracteres de escape como \n
+        // parseados literalmente, la longitud en LLVM podría variar, pero para empezar está perfecto.
+        let len = s.len() + 1;
+
+        // 3. Formateamos la constante global de LLVM
+        let str_decl = format!(
+            "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"", 
+            global_name, 
+            len, 
+            s
+        );
+        
+        // 4. Lo guardamos en la nueva lista de declaraciones globales, no en el código local
+        self.global_decls.push(str_decl);
+
+        // 5. Retornamos el puntero a la cadena. Como usas opaque pointers en LLVM 15+, 'ptr' es ideal.
+        GeneratorResult::new(global_name, "ptr".to_string())
     }
     
     /// Genera una llamada a `new <TypeName>(args)`.
@@ -303,7 +363,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                 "{} = call ptr @{}_new({})",
                 res_reg, type_name, arg_strings.join(", ")
             ));
-            return GeneratorResult::new(res_reg, "ptr".to_string());
+            return GeneratorResult::new(res_reg, type_name.to_string());
         }
 
         GeneratorResult::new("null".to_string(), "ptr".to_string())
@@ -366,9 +426,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             // Derivar el nombre del tipo a partir del tipo LLVM de la instancia.
             // Si el tipo es "ptr" (objeto opaco) usamos el contexto del método.
             // La fase de layout completa reemplazará esta heurística.
-            let type_name = self.current_type_context
-                .clone()
-                .unwrap_or_else(|| "Unknown".to_string());
+            let type_name = inst_res.llvm_type;
 
             self.emit(format!(
                 "{} = call double @{}_{}({})",

@@ -41,6 +41,8 @@ pub struct CodeGenerator {
     pub struct_layout: HashMap<String, Vec<(String, String)>>,
     /// Tipo HULK que se está compilando actualmente (para resolver nombres de métodos).
     pub current_type_context: Option<String>,
+    pub global_decls: Vec<String>,
+    
 }
 
 impl CodeGenerator {
@@ -52,6 +54,7 @@ impl CodeGenerator {
             scopes: vec![HashMap::new()],
             struct_layout: HashMap::new(),
             current_type_context: None,
+            global_decls: Vec::new(),
         }
     }
 
@@ -91,8 +94,10 @@ impl CodeGenerator {
     }
 
     pub fn resolve_variable(&self, name: &str) -> Option<(String, String)> {
+        
         for scope in self.scopes.iter().rev() {
             if let Some(v) = scope.get(name) {
+                
                 return Some(v.clone());
             }
         }
@@ -380,6 +385,14 @@ pub fn compile_hulk_program(
         "; declaración externa de malloc (para constructores)".to_string(),
         "declare ptr @malloc(i64)".to_string(),
         "".to_string(),
+        "; --- Nativas / Built-ins ---".to_string(),
+        "declare i32 @printf(ptr, ...)".to_string(),
+        "@.fmt_double = private unnamed_addr constant [4 x i8] c\"%g\\0A\\00\"".to_string(),
+        "".to_string(),
+        "@.fmt_str = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"".to_string(),
+        "@.str_true = private unnamed_addr constant [5 x i8] c\"true\\00\"".to_string(),
+        "@.str_false = private unnamed_addr constant [6 x i8] c\"false\\00\"".to_string(),
+        "".to_string(),
     ];
 
     // Separar las sentencias por categoría manteniendo el orden original
@@ -441,8 +454,9 @@ pub fn compile_hulk_program(
     }
 
     generator.emit_raw("}".to_string());
-
-    // Ensamblar IR final: cabecera + todo el código generatorerado
+    
+    // Ensamblar IR final: cabecera + globales + todo el código generado
+    header.extend(generator.global_decls); // <--- NUEVO: Inyectar las strings aquí
     header.extend(generator.code);
     let full_ir = header.join("\n");
 
@@ -451,4 +465,14 @@ pub fn compile_hulk_program(
     }
 
     Ok(full_ir)
+
+    // // Ensamblar IR final: cabecera + todo el código generatorerado
+    // header.extend(generator.code);
+    // let full_ir = header.join("\n");
+
+    // if let Some(path) = ir_output {
+    //     fs::write(path, &full_ir)?;
+    // }
+
+    // Ok(full_ir)
 }
