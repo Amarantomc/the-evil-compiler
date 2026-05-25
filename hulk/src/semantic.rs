@@ -286,6 +286,8 @@ impl ExprVisitor<HulkType> for SemanticChecker {
                     HulkType::Unknown
                 }
             }
+            BinaryOp::SingleConc => todo!(),
+            BinaryOp::SpacedConc => todo!(),
         }
     }
 

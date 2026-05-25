@@ -18,6 +18,8 @@ pub enum BinaryOp {
     And,
     Or,
     Mod,
+    SingleConc,
+    SpacedConc,
 }
 
 #[derive(Debug)]

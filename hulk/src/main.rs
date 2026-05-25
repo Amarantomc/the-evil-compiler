@@ -25,7 +25,7 @@ pub  mod  nodes{
     pub mod instantiation_node;
 }
 fn main() {
-    let input = "print(\"Me cago en Ronald\");";
+    let input = "let x = 24 in print(x);";
 
     // 2. Parsear el código para obtener el AST
     let parser = grammar::ProgramParser::new();

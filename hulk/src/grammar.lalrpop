@@ -69,7 +69,7 @@ TypeDecl: TypeDeclNode = {
 };
 
 TypeBodyItem: TypeBodyItem = {
-    <id:Ident> <ty:TypeAnnotation?> "=" <expr:OrExpr> ";" => {
+    <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> ";" => {
         TypeBodyItem::Assignment(AttributeNode::new(id, ty.unwrap_or(HulkType::Unknown), expr))
     },
     <MethodDecl> => TypeBodyItem::FunctionDecl(<>),
@@ -116,7 +116,7 @@ SimpleExpr: TypedExpr = {
     IfExpr,
     WhileExpr,
     ForExpr,
-    OrExpr,
+    ConcExpr,
 };
 
 // Bloques que tienen ; opcional en top level
@@ -162,7 +162,20 @@ ForExpr: TypedExpr = {
 };
 
 Assignment: ((LiteralNode, HulkType), TypedExpr) = {
-    <id:Ident> <ty:TypeAnnotation?> "=" <expr:OrExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
+    <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
+};
+
+pub ConcExpr : TypedExpr = {
+    <l: ConcExpr> <op : ConcOpcode> <r: OrExpr> => {
+        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l,op,r)))
+    },
+    OrExpr,
+};
+
+
+ConcOpcode: BinaryOp = {
+    "@" => BinaryOp::SingleConc,
+    "@@" => BinaryOp::SpacedConc
 };
 
 pub OrExpr: TypedExpr = { 

@@ -14,6 +14,7 @@ use crate::nodes::literal_node::Literal;
 
 impl ExprVisitor<GeneratorResult> for CodeGenerator {
     fn visit_number(&mut self, n: f32) -> GeneratorResult {
+        
         GeneratorResult::new(n.to_string(), "double".to_string())
     }
 
@@ -43,6 +44,10 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             BinaryOp::Dist  => (format!("{} = fcmp une double {}, {}", res_reg, l.register, r.register), "i1"),
             BinaryOp::And => (format!("{} = and i1 {}, {}", res_reg, l.register, r.register), "i1"),
             BinaryOp::Or => (format!("{} = or i1 {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::SingleConc => return self.emit_single_concat(&l, &r),
+            
+            BinaryOp::SpacedConc => return self.emit_spaced_concat(&l, &r),
+            
             _ => (format!("; TODO: Implement {:?} binop", op), "double"),
         };
 
