@@ -151,6 +151,49 @@ impl CodeGenerator {
             HulkType::Unknown  => "double".to_string(), // fallback conservador
         }
     }
+
+    /// Emite IR para concatenar dos strings sin espacio (operador @).
+pub fn emit_single_concat(&mut self, l: &GeneratorResult, r: &GeneratorResult) -> GeneratorResult {
+    let len_l  = self.next_temp();
+    let len_r  = self.next_temp();
+    let tot0   = self.next_temp();
+    let tot1   = self.next_temp();
+    let buf    = self.next_temp();
+    self.emit(format!("{} = call i64 @strlen(ptr {})", len_l, l.register));
+    self.emit(format!("{} = call i64 @strlen(ptr {})", len_r, r.register));
+    self.emit(format!("{} = add i64 {}, {}", tot0, len_l, len_r));
+    self.emit(format!("{} = add i64 {}, 1", tot1, tot0));
+    self.emit(format!("{} = call ptr @malloc(i64 {})", buf, tot1));
+    self.emit(format!("call ptr @strcpy(ptr {}, ptr {})", buf, l.register));
+    self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, r.register));
+    GeneratorResult::new(buf, "ptr".to_string())
+}
+
+/// Emite IR para concatenar dos strings con espacio (operador @@).
+pub fn emit_spaced_concat(&mut self, l: &GeneratorResult, r: &GeneratorResult) -> GeneratorResult {
+    let space_global = "@.str.space".to_string();
+    if !self.global_decls.iter().any(|d| d.starts_with(&space_global)) {
+        self.global_decls.push(
+            "@.str.space = private unnamed_addr constant [2 x i8] c\" \\00\"".to_string()
+        );
+    }
+    let len_l  = self.next_temp();
+    let len_r  = self.next_temp();
+    let tot0   = self.next_temp();
+    let tot1   = self.next_temp();
+    let tot2   = self.next_temp();
+    let buf    = self.next_temp();
+    self.emit(format!("{} = call i64 @strlen(ptr {})", len_l, l.register));
+    self.emit(format!("{} = call i64 @strlen(ptr {})", len_r, r.register));
+    self.emit(format!("{} = add i64 {}, {}", tot0, len_l, len_r));
+    self.emit(format!("{} = add i64 {}, 1", tot1, tot0));
+    self.emit(format!("{} = add i64 {}, 1", tot2, tot1));
+    self.emit(format!("{} = call ptr @malloc(i64 {})", buf, tot2));
+    self.emit(format!("call ptr @strcpy(ptr {}, ptr {})", buf, l.register));
+    self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, space_global));
+    self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, r.register));
+    GeneratorResult::new(buf, "ptr".to_string())
+}
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +427,9 @@ pub fn compile_hulk_program(
         "".to_string(),
         "; declaración externa de malloc (para constructores)".to_string(),
         "declare ptr @malloc(i64)".to_string(),
+        "declare i64 @strlen(ptr)".to_string(),
+        "declare ptr @strcpy(ptr, ptr)".to_string(),
+        "declare ptr @strcat(ptr, ptr)".to_string(),
         "".to_string(),
         "; --- Nativas / Built-ins ---".to_string(),
         "declare i32 @printf(ptr, ...)".to_string(),
