@@ -12,7 +12,7 @@ use crate::nodes::{
     literal_node::{Literal, LiteralNode},
     member_access_node::{MemberAccessNode, MethodCallNode},
     program_node::{Program, Statement},
-    type_decl_node::{TypeDeclNode, AttributeNode, TypeBodyItem},
+    type_decl_node::{TypeDeclNode, AttributeNode, TypeBodyItem, InheritanceClause},
     typedexpr_node::{Expr, HulkType, TypedExpr},
     unaryop_node::{UnaryOp, UnaryOpNode},
     while_node::WhileNode,
@@ -55,7 +55,7 @@ MethodDecl: FunctionDecl = {
 };
 
 TypeDecl: TypeDeclNode = {
-    "type" <name:Ident> <params:("(" <Comma<Param>> ")")?> "{" <body:TypeBodyItem*> "}" => {
+    "type" <name:Ident> <params:("(" <Comma<Param>> ")")?> <inheritance:InheritanceClause?> "{" <body:TypeBodyItem*> "}" => {
         let mut attributes = Vec::new();
         let mut methods = Vec::new();
         for item in body {
@@ -64,8 +64,15 @@ TypeDecl: TypeDeclNode = {
                 TypeBodyItem::FunctionDecl(m) => methods.push(m),
             }
         }
-        TypeDeclNode::new(name, params.unwrap_or(vec![]), attributes, methods)
+        TypeDeclNode::with_inheritance(name, params.unwrap_or(vec![]),attributes, methods,inheritance)
     }
+};
+
+InheritanceClause: InheritanceClause = {
+    "inherits" <parent:Ident> => InheritanceClause::new(parent, None),
+    "inherits" <parent:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
+        InheritanceClause::new(parent, Some(args))
+    },
 };
 
 TypeBodyItem: TypeBodyItem = {
