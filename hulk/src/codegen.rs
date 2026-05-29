@@ -85,6 +85,7 @@ pub struct CodeGenerator {
     /// Tipo HULK que se está compilando actualmente.
     pub current_type_context: Option<String>,
     pub global_decls: Vec<String>,
+    pub current_method_context: Option<String>,
 }
 
 impl CodeGenerator {
@@ -98,12 +99,61 @@ impl CodeGenerator {
             class_meta: HashMap::new(),
             current_type_context: None,
             global_decls: Vec::new(),
+            current_method_context : None,
         }
     }
 
     // -----------------------------------------------------------------------
     // Layout helpers
     // -----------------------------------------------------------------------
+
+
+    /// Busca el ancestro más cercano de `type_name` que tenga una implementación
+    /// propia del método `method_name`, y retorna el nombre LLVM de esa función.
+    ///
+    /// "Implementación propia" significa que la función se llama `@AncestorName_method`,
+    /// es decir, que el impl_fn del slot en la vtable del ancestro apunta a él mismo
+    /// y no a una clase más arriba.  Esto permite que `base()` salte exactamente un
+    /// nivel en la jerarquía aunque haya múltiples niveles de herencia.
+    ///
+    /// Ejemplo con  A -> B -> C  y  B overridea speak():
+    ///   resolve_parent_method("C", "speak") → "@B_speak"   (B es el ancestro más cercano)
+    ///   resolve_parent_method("B", "speak") → "@A_speak"
+    ///
+    /// Por qué llamada directa y no indirecta vía vtable:
+    ///   base() debe llamar SIEMPRE a la implementación del padre estático,
+    ///   independientemente del tipo dinámico del objeto.  Si usáramos el vptr
+    ///   de self (despacho indirecto), obtendríamos el método de la clase más
+    ///   derivada, que puede ser el mismo método que ya estamos ejecutando,
+    ///   causando recursión infinita.  La llamada directa a @Parent_method
+    ///   es exactamente cómo C++ implementa `Base::method()`.
+    pub fn resolve_parent_method(&self, type_name: &str, method_name: &str) -> Option<String> {
+        let meta = self.class_meta.get(type_name)?;
+        let parent_name = meta.parent.as_deref()?;
+        self.resolve_own_impl(parent_name, method_name)
+    }
+ 
+    /// Recorre la cadena de herencia desde `type_name` hacia arriba buscando
+    /// el primer tipo que tenga `method_name` como implementación propia
+    /// (es decir, `@TypeName_method_name`).
+    fn resolve_own_impl(&self, type_name: &str, method_name: &str) -> Option<String> {
+        let expected_impl = format!("@{}_{}", type_name, method_name);
+        if let Some(meta) = self.class_meta.get(type_name) {
+            // ¿Tiene este tipo su propia implementación del método?
+            let has_own = meta.vtable.iter().any(|s| {
+                s.method_name == method_name && s.impl_fn == expected_impl
+            });
+            if has_own {
+                return Some(expected_impl);
+            }
+            // No la tiene; subir al padre.
+            if let Some(ref parent) = meta.parent {
+                return self.resolve_own_impl(parent, method_name);
+            }
+        }
+        None
+    }
+
 
     pub fn register_struct_layout(&mut self, type_name: String, fields: Vec<(String, String)>) {
         self.struct_layout.insert(type_name, fields);
@@ -248,7 +298,7 @@ impl CodeGenerator {
             HulkType::Bool    => "i1".to_string(),
             HulkType::String  => "ptr".to_string(),
             HulkType::Class(_) => "ptr".to_string(),
-            HulkType::Unknown  => "double".to_string(),
+            HulkType::Unknown  => "ptr".to_string(), //Medida de seguridad 
         }
     }
 
@@ -412,34 +462,34 @@ fn compile_vtable_global(generator: &mut CodeGenerator, class_name: &str) {
 // ---------------------------------------------------------------------------
 fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
     let type_name = decl.name.value.as_id();
-
+ 
     // ------------------------------------------------------------------
     // 1.  Recopilar metadatos de herencia y construir ClassMeta
     // ------------------------------------------------------------------
     let parent_name: Option<String> = decl.inheritance.as_ref()
         .map(|inh| inh.parent_name.value.as_id());
-
+ 
     // Obtenemos una copia de la ClassMeta del padre (si existe) para usarla
     // en build_vtable_for_class *antes* de insertar la meta del hijo en el
     // HashMap (no podemos tener referencias mutables e inmutables al mismo tiempo).
     let parent_meta_clone: Option<ClassMeta> = parent_name.as_deref()
         .and_then(|pn| generator.class_meta.get(pn))
         .cloned();
-
+ 
     // Campos propios (sólo los declarados en esta clase, no los heredados).
     let own_fields: Vec<(String, String)> = decl.attributes.iter().map(|attr| {
         let field_name = attr.name.value.as_id();
         let llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
         (field_name, llvm_ty)
     }).collect();
-
+ 
     // Construimos la vtable lógica (orden: heredados primero, nuevos al final).
     let vtable = build_vtable_for_class(
         &type_name,
         parent_meta_clone.as_ref(),
         &decl.methods,
     );
-
+ 
     // Registrar ClassMeta del hijo.
     let meta = ClassMeta {
         parent: parent_name.clone(),
@@ -447,19 +497,19 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         vtable: vtable.clone(),
     };
     generator.class_meta.insert(type_name.clone(), meta);
-
+ 
     // Compatibilidad con código existente que usa struct_layout.
     // Guardamos TODOS los campos de datos (padre + hijo) para que
     // get_field_index funcione correctamente incluso si es llamado
     // con la API antigua.
     let all_fields = generator.collect_all_fields(&type_name);
     generator.register_struct_layout(type_name.clone(), all_fields.clone());
-
+ 
     // ------------------------------------------------------------------
     // 2.  Emitir VTable global
     // ------------------------------------------------------------------
     compile_vtable_global(generator, &type_name);
-
+ 
     // ------------------------------------------------------------------
     // 3.  Emitir definición del struct LLVM
     //
@@ -477,31 +527,31 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
     for (_, ty) in &all_fields {
         field_types.push(ty.clone());
     }
-
+ 
     generator.emit_raw(format!(
         "%{} = type {{ {} }}",
         type_name,
         field_types.join(", ")
     ));
     generator.emit_raw("".to_string());
-
+ 
     // ------------------------------------------------------------------
     // 4.  Emitir constructor @T_new
     // ------------------------------------------------------------------
-
+ 
     // Parámetros del constructor = parámetros del tipo (de la declaración HULK).
     // Si el tipo tiene padre con parámetros, también los incluimos.
     let ctor_params: Vec<String> = decl.params.iter().map(|(p_name, p_type)| {
         let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
         format!("{} %param_{}", llvm_ty, p_name.value.as_id())
     }).collect();
-
+ 
     generator.emit_raw(format!(
         "define ptr @{}_new({}) {{",
         type_name, ctor_params.join(", ")
     ));
     generator.emit_raw("entry:".to_string());
-
+ 
     // Calcular tamaño con el "GEP null trick" clásico de LLVM.
     let size_ptr = generator.next_temp();
     let size_val = generator.next_temp();
@@ -510,10 +560,10 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         size_ptr, type_name
     ));
     generator.emit(format!("{} = ptrtoint ptr {} to i64", size_val, size_ptr));
-
+ 
     let self_ptr = generator.next_temp();
     generator.emit(format!("{} = call ptr @malloc(i64 {})", self_ptr, size_val));
-
+ 
     // ---- Inicializar vptr (índice 0 del struct) -------------------------
     //
     // Fundamento:
@@ -533,7 +583,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         "store ptr @vtable_{}, ptr {}",
         type_name, vptr_field
     ));
-
+ 
     // ---- Scope del constructor: parámetros disponibles (sin self) -------
     generator.push_scope();
     for (p_name, p_type) in &decl.params {
@@ -544,7 +594,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
         generator.define_variable(p_id, ptr, llvm_ty);
     }
-
+ 
     // ---- Inicializar campos del padre mediante llamada a _init_fields ----
     //
     // Si T hereda de P, llamamos @P_init_fields(ptr %self, <args_padre>).
@@ -585,21 +635,21 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
             }
         }
     }
-
+ 
     // ---- Inicializar campos propios de T ----------------------------------
     // Usamos los índices en `all_fields` para calcular el GEP correcto.
     // El offset base de los campos propios de T = numero de campos del padre + 1 (vptr).
     let parent_field_count = parent_name.as_deref()
         .map(|pn| generator.collect_all_fields(pn).len())
         .unwrap_or(0);
-
+ 
     for (attr_idx, attr) in decl.attributes.iter().enumerate() {
         // Índice real en el struct LLVM: 0=vptr, 1..parent_count=campos padre, etc.
         let struct_idx = 1 + parent_field_count + attr_idx;
         let field_llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
-
+ 
         let init_val = attr.initializer.accept(generator);
-
+ 
         let field_ptr = generator.next_temp();
         generator.emit(format!(
             "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 {}",
@@ -610,12 +660,12 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
             field_llvm_ty, init_val.register, field_ptr
         ));
     }
-
+ 
     generator.pop_scope();
     generator.emit(format!("ret ptr {}", self_ptr));
     generator.emit_raw("}".to_string());
     generator.emit_raw("".to_string());
-
+ 
     // ------------------------------------------------------------------
     // 4b.  Emitir @T_init_fields(ptr %self, params...) -> void
     //
@@ -636,13 +686,13 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         }));
         v
     };
-
+ 
     generator.emit_raw(format!(
         "define void @{}_init_fields({}) {{",
         type_name, init_params.join(", ")
     ));
     generator.emit_raw("entry:".to_string());
-
+ 
     // Si tenemos padre, primero inicializamos sus campos.
     if let Some(ref parent_nm) = parent_name {
         if let Some(ref inh) = decl.inheritance {
@@ -683,7 +733,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
             }
         }
     }
-
+ 
     // Inicializar campos propios de T.
     generator.push_scope();
     for (p_name, p_type) in &decl.params {
@@ -694,7 +744,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
         generator.define_variable(p_id, ptr, llvm_ty);
     }
-
+ 
     for (attr_idx, attr) in decl.attributes.iter().enumerate() {
         let struct_idx = 1 + parent_field_count + attr_idx;
         let field_llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
@@ -710,42 +760,42 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         ));
     }
     generator.pop_scope();
-
+ 
     generator.emit("ret void".to_string());
     generator.emit_raw("}".to_string());
     generator.emit_raw("".to_string());
-
+ 
     // ------------------------------------------------------------------
     // 5.  Emitir métodos: @T_m(ptr %self, params...) -> ret
     // ------------------------------------------------------------------
     let old_type_ctx = generator.current_type_context.take();
     generator.current_type_context = Some(type_name.clone());
-
+ 
     for method in &decl.methods {
         let method_name = method.name.value.as_id();
-
+ 
         let mut method_params = vec!["ptr %self".to_string()];
         method_params.extend(method.params.iter().map(|(p_name, p_type)| {
             let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
             format!("{} %param_{}", llvm_ty, p_name.value.as_id())
         }));
-
+ 
         generator.emit_raw(format!(
             "define double @{}_{} ({}) {{",
             type_name, method_name,
             method_params.join(", ")
         ));
         generator.emit_raw("entry:".to_string());
-
+ 
         generator.push_scope();
-
+ 
         // Exponer self en el scope.
         generator.define_variable(
             "%self".to_string(),
             "%self".to_string(),
             format!("%{}", type_name),
         );
-
+ 
         // ------------------------------------------------------------------
         // Exponer los campos del struct como variables locales con nombre.
         //
@@ -765,30 +815,30 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         for (field_idx, (field_name, field_llvm_ty)) in all_fields_for_method.iter().enumerate() {
             // Índice LLVM: +1 porque el índice 0 es el vptr.
             let struct_idx = field_idx + 1;
-
+ 
             // GEP: obtener puntero al campo dentro del struct.
             let field_gep = generator.next_temp();
             generator.emit(format!(
                 "{} = getelementptr inbounds %{}, ptr %self, i32 0, i32 {}  ; campo {}",
                 field_gep, type_name, struct_idx, field_name
             ));
-
+ 
             // Load: leer el valor actual del campo.
             let field_val = generator.next_temp();
             generator.emit(format!(
                 "{} = load {}, ptr {}",
                 field_val, field_llvm_ty, field_gep
             ));
-
+ 
             // Alloca + store: guardarlo como variable mutable en el scope
             // para que dest-assign (field := expr) también funcione.
             let field_ptr = generator.next_temp();
             generator.emit(format!("{} = alloca {}", field_ptr, field_llvm_ty));
             generator.emit(format!("store {} {}, ptr {}", field_llvm_ty, field_val, field_ptr));
-
+ 
             generator.define_variable(field_name.clone(), field_ptr, field_llvm_ty.clone());
         }
-
+ 
         // Exponer parámetros del método.
         for (p_name, p_type) in &method.params {
             let p_id = p_name.value.as_id();
@@ -798,15 +848,19 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
             generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
             generator.define_variable(p_id, ptr, llvm_ty);
         }
-
+ 
+        // Registrar el método activo para que visit_base_call pueda resolverlo.
+        generator.current_method_context = Some(method_name.clone());
+ 
         let result = method.body.accept(generator);
         generator.emit(format!("ret {} {}", result.llvm_type, result.register));
-
+ 
+        generator.current_method_context = None; // salir del contexto del método
         generator.pop_scope();
         generator.emit_raw("}".to_string());
         generator.emit_raw("".to_string());
     }
-
+ 
     generator.current_type_context = old_type_ctx;
 }
 

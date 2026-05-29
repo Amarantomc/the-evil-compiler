@@ -26,7 +26,18 @@ pub  mod  nodes{
 }
 fn main() {
     let input = "
-    
+    type Person(firstname : String, lastname : String) {
+    firstname : String = firstname;
+    lastname : String = lastname;
+
+    name() => self.firstname ;
+}
+    type Knight inherits Person {
+    name() => base();
+}
+
+let p : Knight = new Knight(\"Phil\", \"Collins\") in
+    print(p.name()); 
   ";
 
     // 2. Parsear el código para obtener el AST
