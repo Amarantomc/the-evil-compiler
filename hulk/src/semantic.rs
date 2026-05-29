@@ -505,4 +505,8 @@ impl ExprVisitor<HulkType> for SemanticChecker {
 
         HulkType::Unknown
     }
+    
+    fn visit_base_call(&mut self, args: &[TypedExpr]) -> HulkType {
+        todo!()
+    }
 }

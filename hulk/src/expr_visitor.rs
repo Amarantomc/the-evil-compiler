@@ -20,4 +20,5 @@ pub trait ExprVisitor<T> {
     fn visit_member_access(&mut self, node: &MemberAccessNode) -> T;
     fn visit_method_call(&mut self, node: &MethodCallNode) -> T;
     fn visit_self(&mut self) -> T;
+    fn visit_base_call(&mut self, args: &[TypedExpr]) -> T;
 }

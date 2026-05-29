@@ -29,6 +29,7 @@ pub enum Expr {
     MemberAccess(MemberAccessNode),
     MethodCall(MethodCallNode),
     SelfRef,
+    BaseCall(Vec<TypedExpr>), 
 }
 
 
@@ -77,6 +78,7 @@ impl TypedExpr {
             Expr::Instantiation(node) => v.visit_instantiation(node),
             Expr::MemberAccess(node) => v.visit_member_access(node),
             Expr::MethodCall(node) => v.visit_method_call(node),
+            Expr::BaseCall(typed_exprs) => v.visit_base_call(typed_exprs),
         }
     }
 }

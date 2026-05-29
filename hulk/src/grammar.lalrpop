@@ -297,6 +297,7 @@ Term: TypedExpr = {
     },
     <FunCall> => TypedExpr::new(Expr::FunCall(<>)),
     "(" <ExprRule> ")" ,
+    "base" "(" <args:Comma<SimpleExpr>> ")" => TypedExpr::new(Expr::BaseCall(args)),
     "self" => TypedExpr::new(Expr::SelfRef),
     <id: Ident> => TypedExpr::new(Expr::Literal(id))
 };

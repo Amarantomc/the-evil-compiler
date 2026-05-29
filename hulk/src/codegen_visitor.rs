@@ -521,4 +521,62 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
         GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
+    
+    fn visit_base_call(&mut self, args: &[TypedExpr]) -> GeneratorResult {
+        // Evaluar argumentos antes de cualquier emit para no intercalar instrucciones.
+        let arg_results: Vec<GeneratorResult> = args.iter()
+            .map(|a| a.accept(self))
+            .collect();
+ 
+        // Recuperar contexto: ¿en qué clase y en qué método estamos?
+        let type_name = match self.current_type_context.clone() {
+            Some(t) => t,
+            None => {
+                self.emit("; ERROR: base() usado fuera de contexto de tipo".to_string());
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+        };
+        let method_name = match self.current_method_context.clone() {
+            Some(m) => m,
+            None => {
+                self.emit("; ERROR: base() usado fuera de un método".to_string());
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+        };
+ 
+        // Buscar el ancestro más cercano con implementación propia.
+        let parent_fn = match self.resolve_parent_method(&type_name, &method_name) {
+            Some(f) => f,
+            None => {
+                self.emit(format!(
+                    "; ERROR: no existe implementación padre de '{}' en la jerarquía de '{}'",
+                    method_name, type_name
+                ));
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+        };
+ 
+        // self siempre es el primer argumento.
+        let self_reg = match self.resolve_variable("%self") {
+            Some((ptr, _)) => ptr,
+            None => "%self".to_string(),
+        };
+ 
+        let mut all_args = vec![format!("ptr {}", self_reg)];
+        all_args.extend(
+            arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register))
+        );
+ 
+        let res_reg = self.next_temp();
+        self.emit(format!(
+            "; base() → llamada directa a {} (sin pasar por vtable)",
+            parent_fn
+        ));
+        self.emit(format!(
+            "{} = call double {}({})",
+            res_reg, parent_fn, all_args.join(", ")
+        ));
+ 
+        GeneratorResult::new(res_reg, "double".to_string())
+    }
 }
