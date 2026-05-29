@@ -25,20 +25,8 @@ pub  mod  nodes{
     pub mod instantiation_node;
 }
 fn main() {
-    let input = "type Point {
-    x = 0;
-    y = 0;
-
-    getX() => self.x;
-    getY() => self.y;
-
-    setX(x) => self.x := x;
-    setY(y) => self.y := y;
-}
-   type PolarPoint(phi, rho) inherits Point(rho * sin(phi), rho * cos(phi)) {
-    rho() => sqrt(self.getX() ^ 2 + self.getY() ^ 2);
+    let input = "
     
-}
   ";
 
     // 2. Parsear el código para obtener el AST
@@ -66,12 +54,12 @@ fn main() {
         println!("Chequeo semántico exitoso. El programa es válido.");
         // Opcional: imprimir el AST procesado
          println!("{:#?}", program);
-            // match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
-            //     Ok(res) => {
-            //         println!("LLVM IR generado exitosamente.");
-            //         // println!("Resultado IR:\n{}", res);
-            //     },
-            //     Err(e) => eprintln!("Error generando IR: {}", e),
-            // }
+            match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
+                Ok(res) => {
+                    println!("LLVM IR generado exitosamente.");
+                    // println!("Resultado IR:\n{}", res);
+                },
+                Err(e) => eprintln!("Error generando IR: {}", e),
+            }
     }
 //}
