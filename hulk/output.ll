@@ -54,7 +54,7 @@ entry:
   ret void
 }
 
-define double @Person_name (ptr %self) {
+define ptr @Person_name (ptr %self) {
 entry:
   %t16 = getelementptr inbounds %Person, ptr %self, i32 0, i32 1  ; campo firstname
   %t17 = load ptr, ptr %t16
@@ -65,8 +65,8 @@ entry:
   %t21 = alloca ptr
   store ptr %t20, ptr %t21
   %t22 = getelementptr inbounds %Person, ptr %self, i32 0, i32 1
-  %t23 = load double, ptr %t22
-  ret double %t23
+  %t23 = load ptr , ptr %t22
+  ret ptr %t23
 }
 
 %VTable_Knight = type { ptr }
@@ -91,7 +91,7 @@ entry:
   ret void
 }
 
-define double @Knight_name (ptr %self) {
+define ptr @Knight_name (ptr %self) {
 entry:
   %t28 = getelementptr inbounds %Knight, ptr %self, i32 0, i32 1  ; campo firstname
   %t29 = load ptr, ptr %t28
@@ -101,23 +101,22 @@ entry:
   %t32 = load ptr, ptr %t31
   %t33 = alloca ptr
   store ptr %t32, ptr %t33
-  ; base() → llamada directa a @Person_name (sin pasar por vtable)
-  %t34 = call double @Person_name(ptr %self)
-  ret double %t34
+  %t34 = call ptr @Person_name(ptr %self)
+  ret ptr %t34
 }
 
 define i32 @main() {
 entry:
   %t37 = call ptr @Knight_new(ptr @.str.35, ptr @.str.36)
-  %t38 = alloca ptr
-  store ptr %t37, ptr %t38
+  %t38 = alloca Knight
+  store Knight %t37, ptr %t38
   %t39 = load ptr, ptr %t38
   ; Despacho virtual: Knight.name()
   %t40 = getelementptr inbounds %Knight, ptr %t39, i32 0, i32 0  ; leer vptr
   %t41 = load ptr, ptr %t40
   %t42 = getelementptr inbounds %VTable_Knight, ptr %t41, i32 0, i32 0  ; slot name
   %t43 = load ptr, ptr %t42
-  %t44 = call double %t43(ptr %t39)
-  %t45 = call i32 (ptr, ...) @printf(ptr @.fmt_double, double %t44)
+  %t44 = call ptr %t43(ptr %t39)
+  %t45 = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr %t44)
   ret i32 0
 }

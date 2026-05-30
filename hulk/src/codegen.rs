@@ -45,6 +45,8 @@ pub struct VTableSlot {
     /// Tipo LLVM del function pointer: `ptr` (opaque pointer, LLVM 15+).
     /// Mantenemos este campo para extensión futura con typed function pointers.
     pub fn_ptr_llvm_type: String,
+    /// Tipo de retorno del método en LLVM (i1, double, ptr, etc).
+    pub return_type: String,
 }
 
 /// Información de una clase registrada en el CodeGenerator.
@@ -158,7 +160,7 @@ impl CodeGenerator {
     pub fn register_struct_layout(&mut self, type_name: String, fields: Vec<(String, String)>) {
         self.struct_layout.insert(type_name, fields);
     }
-
+   
     /// Retorna el índice LLVM (base-0) del campo `field_name` dentro del
     /// struct `llvm_type`, contando el puntero a vtable como índice 0.
     ///
@@ -382,12 +384,14 @@ fn build_vtable_for_class(
         if let Some(slot) = vtable.iter_mut().find(|s| s.method_name == method_name) {
             // Override: actualizamos la implementación conservando el índice.
             slot.impl_fn = impl_fn;
+            slot.return_type = CodeGenerator::hulk_type_to_llvm(&method.return_type);
         } else {
             // Método nuevo: agregamos un slot al final.
             vtable.push(VTableSlot {
                 method_name: method_name.clone(),
                 impl_fn,
                 fn_ptr_llvm_type: "ptr".to_string(),
+                return_type: CodeGenerator::hulk_type_to_llvm(&method.return_type),
             });
         }
     }
@@ -773,15 +777,16 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
  
     for method in &decl.methods {
         let method_name = method.name.value.as_id();
- 
+        let return_type=CodeGenerator::hulk_type_to_llvm(&method.return_type);
         let mut method_params = vec!["ptr %self".to_string()];
+       
         method_params.extend(method.params.iter().map(|(p_name, p_type)| {
             let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
             format!("{} %param_{}", llvm_ty, p_name.value.as_id())
         }));
  
         generator.emit_raw(format!(
-            "define double @{}_{} ({}) {{",
+            "define {} @{}_{} ({}) {{",return_type,
             type_name, method_name,
             method_params.join(", ")
         ));
@@ -869,14 +874,15 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
 // ---------------------------------------------------------------------------
 fn compile_function_decl(generator: &mut CodeGenerator, decl: &FunctionDecl) {
     let name = decl.name.value.as_id();
-
+    let return_type=CodeGenerator::hulk_type_to_llvm(&decl.return_type);
+    
     let params: Vec<String> = decl.params.iter().map(|(p_name, p_type)| {
         let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
         let p_id = p_name.value.as_id();
         format!("{} %param_{}", llvm_ty, p_id)
     }).collect();
 
-    generator.emit_raw(format!("define double @{}({}) {{", name, params.join(", ")));
+    generator.emit_raw(format!("define {} @{}({}) {{", return_type, name, params.join(", ")));
     generator.emit_raw("entry:".to_string());
 
     generator.push_scope();
