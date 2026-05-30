@@ -247,12 +247,13 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                 return GeneratorResult::new("0.0".to_string(), "double".to_string());
             }
 
+            let return_type = CodeGenerator::hulk_type_to_llvm(&node.return_type);
             let res_reg = self.next_temp();
             let arg_strings: Vec<String> = args.iter()
                 .map(|a| format!("{} {}", a.llvm_type, a.register))
                 .collect();
-            self.emit(format!("{} = call double @{}({})", res_reg, name, arg_strings.join(", ")));
-            return GeneratorResult::new(res_reg, "double".to_string());
+            self.emit(format!("{} = call {} @{}({})", res_reg, return_type, name, arg_strings.join(", ")));
+            return GeneratorResult::new(res_reg, return_type);
         }
 
         GeneratorResult::new("0.0".to_string(), "double".to_string())
@@ -397,13 +398,14 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             let field_index = self.get_field_index(&inst_res.llvm_type, field_name);
             let field_ptr   = self.next_temp();
             let field_val   = self.next_temp();
+            let return_type = self.resolve_variable(&field_name).unwrap().1;
 
             self.emit(format!(
                 "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {}",
                 field_ptr, inst_res.llvm_type, inst_res.register, field_index
             ));
-            self.emit(format!("{} = load double, ptr {}", field_val, field_ptr));
-            return GeneratorResult::new(field_val, "double".to_string());
+            self.emit(format!("{} = load {} , ptr {}", field_val, return_type, field_ptr));
+            return GeneratorResult::new(field_val, return_type);
         }
         GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
@@ -504,19 +506,20 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             ));
 
             // ---- 4.  Llamada indirecta ------------------------------------
-            //
-            // El tipo de retorno se asume `double` (la convención del codegen
-            // existente).  Una extensión futura puede leerlo del ClassMeta.
             let res_reg = self.next_temp();
+            let return_type = self.get_vtable_slot(&type_name_raw, slot_index)
+                .map(|s| s.return_type.clone())
+                .unwrap_or_else(|| CodeGenerator::hulk_type_to_llvm(&node.return_type));
+
             let mut all_args = vec![format!("ptr {}", inst_res.register)];
             all_args.extend(arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register)));
 
             self.emit(format!(
-                "{} = call double {}({})",
-                res_reg, fn_ptr, all_args.join(", ")
+                "{} = call {} {}({})",
+                res_reg, return_type, fn_ptr, all_args.join(", ")
             ));
 
-            return GeneratorResult::new(res_reg, "double".to_string());
+            return GeneratorResult::new(res_reg, return_type);
         }
 
         GeneratorResult::new("0.0".to_string(), "double".to_string())
@@ -539,7 +542,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         let method_name = match self.current_method_context.clone() {
             Some(m) => m,
             None => {
-                self.emit("; ERROR: base() usado fuera de un método".to_string());
+                //self.emit("; ERROR: base() usado fuera de un método".to_string());
                 return GeneratorResult::new("0.0".to_string(), "double".to_string());
             }
         };
@@ -548,10 +551,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         let parent_fn = match self.resolve_parent_method(&type_name, &method_name) {
             Some(f) => f,
             None => {
-                self.emit(format!(
-                    "; ERROR: no existe implementación padre de '{}' en la jerarquía de '{}'",
-                    method_name, type_name
-                ));
+                 
                 return GeneratorResult::new("0.0".to_string(), "double".to_string());
             }
         };
@@ -561,22 +561,29 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             Some((ptr, _)) => ptr,
             None => "%self".to_string(),
         };
- 
+        
         let mut all_args = vec![format!("ptr {}", self_reg)];
         all_args.extend(
             arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register))
         );
+        let slot_index = self
+                .get_vtable_slot_index(&type_name, &method_name)
+                .unwrap_or_else(|| {
+                    // Fallback: si no encontramos el slot (error semántico ya reportado),
+                    // usamos 0 para generar IR sintácticamente válido.
+                    0
+                });
+
+         let return_type = self.get_vtable_slot(&method_name,slot_index).map(|s| s.return_type.clone()).unwrap_or_else(|| "ptr".to_string());
+                
  
         let res_reg = self.next_temp();
+        
         self.emit(format!(
-            "; base() → llamada directa a {} (sin pasar por vtable)",
-            parent_fn
-        ));
-        self.emit(format!(
-            "{} = call double {}({})",
-            res_reg, parent_fn, all_args.join(", ")
+            "{} = call {} {}({})",
+            res_reg, return_type, parent_fn, all_args.join(", ")
         ));
  
-        GeneratorResult::new(res_reg, "double".to_string())
+        GeneratorResult::new(res_reg, return_type)
     }
 }

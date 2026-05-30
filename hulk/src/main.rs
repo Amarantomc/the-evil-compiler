@@ -30,13 +30,13 @@ fn main() {
     firstname : String = firstname;
     lastname : String = lastname;
 
-    name() => self.firstname ;
+    name() : String => self.firstname ;
 }
     type Knight inherits Person {
-    name() => base();
+    name() : String => base();
 }
 
-let p : Knight = new Knight(\"Phil\", \"Collins\") in
+let p  = new Knight(\"Phil\", \"Collins\") in
     print(p.name()); 
   ";
 
