@@ -1,4 +1,4 @@
-use crate::nodes::{literal_node::LiteralNode,typedexpr_node::TypedExpr, typedexpr_node::HulkType};
+use crate::nodes::{literal_node::LiteralNode,expr_node::Expr, expr_node::HulkType};
 
 
 
@@ -6,11 +6,12 @@ use crate::nodes::{literal_node::LiteralNode,typedexpr_node::TypedExpr, typedexp
 pub struct FunctionDecl {
     pub name: LiteralNode,
     pub params: Vec<(LiteralNode, HulkType)>,
-    pub body: TypedExpr,
+    pub body: Expr,
+    pub return_type: HulkType,
 }
 
-impl FunctionDecl {
-    pub fn new(name: LiteralNode, params: Vec<(LiteralNode,HulkType)>, body: TypedExpr) -> Self {
-        FunctionDecl { name, params, body }
+impl FunctionDecl { //Revisar Grammar para return unkwon
+    pub fn new(name: LiteralNode, params: Vec<(LiteralNode,HulkType)>, body: Expr,return_type: HulkType ) -> Self {
+        FunctionDecl { name, params, body, return_type }
     }
 }

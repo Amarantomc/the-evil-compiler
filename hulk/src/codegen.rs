@@ -4,7 +4,7 @@ use crate::nodes::function_decl_node::FunctionDecl;
 use crate::nodes::literal_node::Literal;
 use crate::nodes::program_node::{Program, Statement};
 use crate::nodes::type_decl_node::TypeDeclNode;
-use crate::nodes::typedexpr_node::{HulkType, TypedExpr};
+use crate::nodes::expr_node::{HulkType, Expr};
 
 // ---------------------------------------------------------------------------
 // GeneratorResult
@@ -926,7 +926,7 @@ pub fn compile_hulk_program(
 
     let mut type_decls: Vec<&TypeDeclNode> = Vec::new();
     let mut fun_decls:  Vec<&FunctionDecl> = Vec::new();
-    let mut expressions: Vec<&TypedExpr>   = Vec::new();
+    let mut expressions: Vec<&Expr>   = Vec::new();
 
     for stmt in &program.statements {
         match stmt {

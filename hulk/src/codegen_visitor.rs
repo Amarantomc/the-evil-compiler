@@ -7,7 +7,7 @@ use crate::nodes::for_node::ForNode;
 use crate::nodes::funcall_node::FunCallNode;
 use crate::nodes::if_node::IfNode;
 use crate::nodes::let_node::LetNode;
-use crate::nodes::typedexpr_node::{Expr, HulkType, TypedExpr};
+use crate::nodes::expr_node::{Expr, HulkType};
 use crate::nodes::unaryop_node::UnaryOp;
 use crate::nodes::while_node::WhileNode;
 use crate::nodes::literal_node::Literal;
@@ -25,9 +25,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
     fn visit_binary_op(
         &mut self,
-        left: &TypedExpr,
+        left: & Expr,
         op: &BinaryOp,
-        right: &TypedExpr,
+        right: & Expr,
     ) -> GeneratorResult {
         let l = left.accept(self);
         let r = right.accept(self);
@@ -172,7 +172,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     fn visit_dest_assign(&mut self, node: &DestAssignNode) -> GeneratorResult {
         let val = node.expr.accept(self);
 
-        match &node.target.kind {
+        match &node.target.as_ref() {
             Expr::Literal(lit_node) => {
                 if let Literal::Id(name) = &lit_node.value {
                     if let Some((ptr, ty)) = self.resolve_variable(name) {
@@ -262,7 +262,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         // El parser construye el iterador como FunCall("range", [start, end]).
         // No existe una funcion `range` real; extraemos los dos argumentos
         // directamente del nodo y generamos un loop con contador en IR.
-        let (start_res, end_res) = match &node.iterator.kind {
+        let (start_res, end_res) = match &node.iterator.as_ref() {
             Expr::FunCall(call) => {
                 if call.args.len() == 2 {
                     let s = call.args[0].accept(self);
@@ -337,7 +337,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(final_val, "double".to_string())
     }
 
-    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &TypedExpr) -> GeneratorResult {
+    fn visit_unary_op(&mut self, op: &UnaryOp, expr: & Expr) -> GeneratorResult {
         let val = expr.accept(self);
         let res_reg = self.next_temp();
         let (instr, res_ty) = match op {
@@ -522,7 +522,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
     
-    fn visit_base_call(&mut self, args: &[TypedExpr]) -> GeneratorResult {
+    fn visit_base_call(&mut self, args: &[ Expr]) -> GeneratorResult {
         // Evaluar argumentos antes de cualquier emit para no intercalar instrucciones.
         let arg_results: Vec<GeneratorResult> = args.iter()
             .map(|a| a.accept(self))

@@ -1,17 +1,19 @@
-use crate::nodes::typedexpr_node::TypedExpr;
+use crate::nodes::expr_node::{Expr, HulkType};
 
 
 #[derive(Debug)]
 pub struct WhileNode {
-    pub condition: Box<TypedExpr>,
-    pub body: Box<TypedExpr>,
+    pub condition: Box<Expr>,
+    pub body: Box<Expr>,
+    pub return_type: HulkType,
 }
 
 impl WhileNode {
-    pub fn new(condition: TypedExpr, body: TypedExpr) -> Self {
+    pub fn new(condition: Expr, body: Expr) -> Self {
         WhileNode {
             condition: Box::new(condition),
             body: Box::new(body),
+            return_type: HulkType::Unknown
         }
     }
 }
