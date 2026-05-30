@@ -29,36 +29,24 @@ pub enum Expr {
     MemberAccess(MemberAccessNode),
     MethodCall(MethodCallNode),
     SelfRef,
-    BaseCall(Vec<TypedExpr>), 
+    BaseCall(Vec<Expr>), 
 }
 
 
 
 
-#[derive(Debug)]
-pub struct TypedExpr {
-    pub kind: Expr,
-    pub return_type: HulkType,
-}
+ 
 
 
 
 
-impl TypedExpr {
-    pub fn new(kind: Expr) -> Self {
-        TypedExpr {
-            kind,
-            return_type: HulkType::Unknown, // Por defecto es desconocido hasta la fase semántica
-        }
-    }
+impl Expr {
+     
     
-    // Opcional: un constructor si ya sabes el tipo desde el parseo
-    pub fn with_type(kind: Expr, return_type: HulkType) -> Self {
-        TypedExpr { kind, return_type }
-    }
+    
 
     pub fn accept<T>(&self, v: &mut impl ExprVisitor<T>) -> T {
-        match &self.kind {
+        match &self {
             Expr::Literal(node) => match &node.value {
                 Literal::Number(n) => v.visit_number(*n),
                 Literal::Bool(b) => v.visit_bool(*b),

@@ -7,7 +7,7 @@ pub mod codegen;
 pub mod codegen_visitor;
 pub mod semantic;
 pub  mod  nodes{
-    pub mod typedexpr_node;
+    pub mod expr_node;
     pub mod function_decl_node;
     pub mod literal_node;
     pub mod destassing_node;

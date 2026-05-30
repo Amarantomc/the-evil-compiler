@@ -13,7 +13,7 @@ use crate::nodes::{
     member_access_node::{MemberAccessNode, MethodCallNode},
     program_node::{Program, Statement},
     type_decl_node::{TypeDeclNode, AttributeNode, TypeBodyItem, InheritanceClause},
-    typedexpr_node::{Expr, HulkType, TypedExpr},
+    expr_node::{Expr, HulkType},
     unaryop_node::{UnaryOp, UnaryOpNode},
     while_node::WhileNode,
 };
@@ -31,26 +31,26 @@ Statement: Statement = {
 };
 
 // Top level: SimpleExpr requiere ; u BlockExpr tiene ; opcional
-TopExpr: TypedExpr = {
+TopExpr: Expr = {
     <e:SimpleExpr> ";" => e,
     <e:BlockExpr> (";")?  => e
 };
 
 FunctionDecl: FunctionDecl = {
-    "function" <name:Ident> "(" <params:Comma<Param>> ")" "=>" <body:ExprRule> ";" => {
-        FunctionDecl::new(name, params, body)
+    "function" <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> "=>" <body:ExprRule> ";" => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
     },
-    "function" <name:Ident> "(" <params:Comma<Param>> ")" <body:BlockExpr> (";")?  => {
-        FunctionDecl::new(name, params, body)
+    "function" <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> <body:BlockExpr> (";")?  => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
     },
 };
 
 MethodDecl: FunctionDecl = {
-    <name:Ident> "(" <params:Comma<Param>> ")" "=>" <body:ExprRule> ";" => {
-        FunctionDecl::new(name, params, body)
+    <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> "=>" <body:ExprRule> ";" => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
     },
-    <name:Ident> "(" <params:Comma<Param>> ")" <body:BlockExpr> (";")?  => {
-        FunctionDecl::new(name, params, body)
+    <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> <body:BlockExpr> (";")?  => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
     },
 };
 
@@ -112,13 +112,13 @@ Comma<T>: Vec<T> = {
 };
 
 // Expresión pura (sin ; manejo): usado dentro de Let, If, While, For
-pub ExprRule: TypedExpr = {
+pub ExprRule: Expr = {
     SimpleExpr,
     BlockExpr,
 };
 
 // Expresiones simples que requieren ; en top level (pero el ; se agrega en TopExpr)
-SimpleExpr: TypedExpr = {
+SimpleExpr: Expr = {
     LetExpr,
     IfExpr,
     WhileExpr,
@@ -127,54 +127,54 @@ SimpleExpr: TypedExpr = {
 };
 
 // Bloques que tienen ; opcional en top level
-BlockExpr: TypedExpr = {
+BlockExpr: Expr = {
     "{" <exprs:(BlockItem)*> "}"  => {
-        TypedExpr::new(Expr::Block(BlockNode::new(exprs)))
+        Expr::Block(BlockNode::new(exprs))
     }
 };
 
 // Items dentro de un bloque: pueden ser simples (con ;) o bloques (con ; opcional)
-BlockItem: TypedExpr = {
+BlockItem: Expr = {
     <e:SimpleExpr> ";" => e,
     <e:BlockExpr> (";")?  => e
 };
 
-LetExpr: TypedExpr = {
+LetExpr: Expr = {
     "let" <assignments:Comma<Assignment>> "in" <body:ExprRule> => {
-        TypedExpr::new(Expr::Let(LetNode::new(assignments, body)))
+        Expr::Let(LetNode::new(assignments, body))
     },
 };
 
-IfExpr: TypedExpr = {
+IfExpr: Expr = {
     "if" "(" <cond:OrExpr> ")" <true_branch:ExprRule> <elif_branches:Elif*> "else" <false_branch:ExprRule> => {
-        TypedExpr::new(Expr::If(IfNode::new(cond, true_branch, elif_branches, false_branch)))
+        Expr::If(IfNode::new(cond, true_branch, elif_branches, false_branch))
     },
 };
 
-Elif: (TypedExpr, TypedExpr) = {
+Elif: (Expr, Expr) = {
     "elif" "(" <cond:OrExpr> ")" <body:ExprRule> => (cond, body),
 };
 
-WhileExpr: TypedExpr = {
+WhileExpr: Expr = {
     "while" "(" <cond:OrExpr> ")" <body:ExprRule> => {
-        TypedExpr::new(Expr::While(WhileNode::new(cond, body)))
+        Expr::While(WhileNode::new(cond, body))
     },
 };
 
-ForExpr: TypedExpr = {
+ForExpr: Expr = {
     "for" "(" <var:Ident> "in" "range" "(" <iter1:OrExpr> "," <iter2:OrExpr> ")" ")" <body:ExprRule> => {
-        let iter = TypedExpr::new(Expr::FunCall(FunCallNode::new(LiteralNode::new(Literal::Id("range".to_string())), vec![iter1, iter2])));
-        TypedExpr::new(Expr::For(ForNode::new(var, iter, body)))
+        let iter = Expr::FunCall(FunCallNode::new(LiteralNode::new(Literal::Id("range".to_string())), vec![iter1, iter2]));
+        Expr::For(ForNode::new(var, iter, body))
     },
 };
 
-Assignment: ((LiteralNode, HulkType), TypedExpr) = {
+Assignment: ((LiteralNode, HulkType), Expr) = {
     <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
 };
 
-pub ConcExpr : TypedExpr = {
+pub ConcExpr : Expr = {
     <l: ConcExpr> <op : ConcOpcode> <r: OrExpr> => {
-        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l,op,r)))
+        Expr::Binary(BinaryOpNode::new(l,op,r))
     },
     OrExpr,
 };
@@ -185,9 +185,9 @@ ConcOpcode: BinaryOp = {
     "@@" => BinaryOp::SpacedConc
 };
 
-pub OrExpr: TypedExpr = { 
+pub OrExpr: Expr = { 
     <l:OrExpr> <op:OrOpcode> <r:AndExpr> => {
-        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l, op, r)))
+        Expr::Binary(BinaryOpNode::new(l, op, r))
     },
     AndExpr,
 };
@@ -197,9 +197,9 @@ OrOpcode: BinaryOp = {
     "||" => BinaryOp::Or
 };
 
-pub AndExpr: TypedExpr = {
+pub AndExpr: Expr = {
     <l:AndExpr> <op:AndOpcode> <r:AssignExpr> => {
-        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l, op, r)))
+        Expr::Binary(BinaryOpNode::new(l, op, r))
     },
     AssignExpr,
 };
@@ -209,16 +209,16 @@ AndOpcode: BinaryOp = {
     "&&" => BinaryOp::And
 };
 
-AssignExpr: TypedExpr = {
+AssignExpr: Expr = {
     <id:Term> ":=" <expr:AssignExpr> => {
-        TypedExpr::new(Expr::DestAssign(DestAssignNode::new(id, expr)))
+        Expr::DestAssign(DestAssignNode::new(id, expr))
     },
     CompExpr,
 };
 
-pub CompExpr: TypedExpr = {
+pub CompExpr: Expr = {
     <l:CompExpr> <op:CompOpcode> <r:ArithExpr> => {
-        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l, op, r)))
+        Expr::Binary(BinaryOpNode::new(l, op, r))
     },
     ArithExpr,
 };
@@ -232,9 +232,9 @@ CompOpcode: BinaryOp = {
     "<" => BinaryOp::Less
 };
 
-pub ArithExpr: TypedExpr = {
+pub ArithExpr: Expr = {
     <l:ArithExpr> <op:ArithOpCode> <r:FactAnd> => {
-        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l, op, r)))
+        Expr::Binary(BinaryOpNode::new(l, op, r))
     },
     FactAnd,
 };
@@ -244,9 +244,9 @@ ArithOpCode: BinaryOp = {
     "-" => BinaryOp::Sub,
 };
 
-FactAnd: TypedExpr = {
+FactAnd: Expr = {
     <l:FactAnd> <op:FactAndOp> <r:UnaryExpr> => {
-        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l, op, r)))
+        Expr::Binary(BinaryOpNode::new(l, op, r))
     },
     UnaryExpr,
 };
@@ -257,9 +257,9 @@ FactAndOp: BinaryOp = {
     "%" => BinaryOp::Mod,
 };
 
-UnaryExpr: TypedExpr = {
+UnaryExpr: Expr = {
     <op:UnaryOpCode> <expr:Base> => {
-        TypedExpr::new(Expr::Unary(UnaryOpNode::new(op, expr)))
+        Expr::Unary(UnaryOpNode::new(op, expr))
     },
     Base,
 };
@@ -270,9 +270,9 @@ UnaryOpCode: UnaryOp = {
     "!" => UnaryOp::Not,
 };
 
-Base: TypedExpr = {
+Base: Expr = {
     <l:Base> <op:PowOpcode> <r:Term> => {
-        TypedExpr::new(Expr::Binary(BinaryOpNode::new(l, op, r)))
+        Expr::Binary(BinaryOpNode::new(l, op, r))
     },
     Term,
 };
@@ -281,25 +281,25 @@ PowOpcode: BinaryOp = {
     "^" => BinaryOp::Pow
 };
 
-Term: TypedExpr = {
-    Num => TypedExpr::new(Expr::Literal(LiteralNode::new(Literal::Number(<>)))),
-    "true" => TypedExpr::new(Expr::Literal(LiteralNode::new(Literal::Bool(true)))),
-    "false" => TypedExpr::new(Expr::Literal(LiteralNode::new(Literal::Bool(false)))),
-    StringLit => TypedExpr::new(Expr::Literal(LiteralNode::new(Literal::Str(<>)))),
+Term: Expr = {
+    Num => Expr::Literal(LiteralNode::new(Literal::Number(<>))),
+    "true" => Expr::Literal(LiteralNode::new(Literal::Bool(true))),
+    "false" => Expr::Literal(LiteralNode::new(Literal::Bool(false))),
+    StringLit => Expr::Literal(LiteralNode::new(Literal::Str(<>))),
     "new" <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
-        TypedExpr::new(Expr::Instantiation(FunCallNode::new(id, args)))
+        Expr::Instantiation(FunCallNode::new(id, args))
     },
     <inst:Term> "." <call:FunCall> => {
-        TypedExpr::new(Expr::MethodCall(MethodCallNode::new(inst, call)))
+        Expr::MethodCall(MethodCallNode::new(inst, call))
     },
     <inst:Term> "." <member:Ident> => {
-        TypedExpr::new(Expr::MemberAccess(MemberAccessNode::new(inst, member)))
+        Expr::MemberAccess(MemberAccessNode::new(inst, member))
     },
-    <FunCall> => TypedExpr::new(Expr::FunCall(<>)),
+    <FunCall> => Expr::FunCall(<>),
     "(" <ExprRule> ")" ,
-    "base" "(" <args:Comma<SimpleExpr>> ")" => TypedExpr::new(Expr::BaseCall(args)),
-    "self" => TypedExpr::new(Expr::SelfRef),
-    <id: Ident> => TypedExpr::new(Expr::Literal(id))
+    "base" "(" <args:Comma<SimpleExpr>> ")" => Expr::BaseCall(args),
+    "self" => Expr::SelfRef,
+    <id: Ident> => Expr::Literal(id)
 };
 
 FunCall: FunCallNode = {

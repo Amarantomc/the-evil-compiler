@@ -1,4 +1,4 @@
-use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, member_access_node::{MemberAccessNode, MethodCallNode}, typedexpr_node::TypedExpr, unaryop_node::UnaryOp, while_node::WhileNode};
+use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, member_access_node::{MemberAccessNode, MethodCallNode}, expr_node::Expr, unaryop_node::UnaryOp, while_node::WhileNode};
 
  
 
@@ -7,8 +7,8 @@ pub trait ExprVisitor<T> {
     fn visit_bool(&mut self, b: bool) -> T;
     fn visit_string(&mut self, s: &str) -> T;
     fn visit_id(&mut self, id: &str) -> T;
-    fn visit_binary_op(&mut self, left: &TypedExpr, op: &BinaryOp, right: &TypedExpr) -> T;
-    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &TypedExpr) -> T;
+    fn visit_binary_op(&mut self, left: &Expr, op: &BinaryOp, right: &Expr) -> T;
+    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &Expr) -> T;
     fn visit_let(&mut self, node: &LetNode) -> T;
     fn visit_if(&mut self, node: &IfNode) -> T;
     fn visit_while(&mut self, node: &WhileNode) -> T;
@@ -20,5 +20,5 @@ pub trait ExprVisitor<T> {
     fn visit_member_access(&mut self, node: &MemberAccessNode) -> T;
     fn visit_method_call(&mut self, node: &MethodCallNode) -> T;
     fn visit_self(&mut self) -> T;
-    fn visit_base_call(&mut self, args: &[TypedExpr]) -> T;
+    fn visit_base_call(&mut self, args: &[Expr]) -> T;
 }

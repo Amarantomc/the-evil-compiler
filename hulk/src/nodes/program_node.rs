@@ -1,4 +1,4 @@
-use crate::nodes::{function_decl_node::FunctionDecl, typedexpr_node::TypedExpr, type_decl_node::TypeDeclNode};
+use crate::nodes::{function_decl_node::FunctionDecl, expr_node::Expr, type_decl_node::TypeDeclNode};
 
 
 #[derive(Debug)]
@@ -16,5 +16,5 @@ impl Program {
 pub enum Statement {
     FunctionDecl(FunctionDecl),
     TypeDecl(TypeDeclNode),
-    Expression(TypedExpr),
+    Expression(Expr),
 }
