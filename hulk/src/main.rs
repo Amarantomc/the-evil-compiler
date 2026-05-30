@@ -26,14 +26,14 @@ pub  mod  nodes{
 }
 fn main() {
     let input = "
-    type Person(firstname : String, lastname : String) {
-    firstname : String = firstname;
-    lastname : String = lastname;
+    type Person(firstname , lastname ) {
+    firstname  = firstname;
+    lastname  = lastname;
 
-    name() : String => self.firstname ;
+    name()  => self.firstname ;
 }
     type Knight inherits Person {
-    name() : String => base();
+    name()  => base();
 }
 
 let p  = new Knight(\"Phil\", \"Collins\") in
@@ -51,17 +51,17 @@ let p  = new Knight(\"Phil\", \"Collins\") in
     };
 
     // 3. Ejecutar el chequeo semántico
-    //let mut checker = semantic::SemanticChecker::new();
-    //checker.check_program(&mut program);
+    let mut checker = semantic::SemanticChecker::new();
+    checker.check_program(&mut program);
 
-    // 4. Reportar errores o confirmar éxito
-    // if !checker.errors.is_empty() {
-    //     eprintln!("Se encontraron errores semánticos:");
-    //     for error in &checker.errors {
-    //         eprintln!("- {}", error);
-    //     }
-    //     std::process::exit(1);
-    // } else {
+    //4. Reportar errores o confirmar éxito
+    if !checker.errors.is_empty() {
+        eprintln!("Se encontraron errores semánticos:");
+        for error in &checker.errors {
+            eprintln!("- {}", error);
+        }
+        std::process::exit(1);
+    } else {
         println!("Chequeo semántico exitoso. El programa es válido.");
         // Opcional: imprimir el AST procesado
          println!("{:#?}", program);
@@ -73,4 +73,4 @@ let p  = new Knight(\"Phil\", \"Collins\") in
                 Err(e) => eprintln!("Error generando IR: {}", e),
             }
     }
-//}
+}
