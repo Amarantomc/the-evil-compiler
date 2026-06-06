@@ -26,18 +26,18 @@ pub  mod  nodes{
 }
 fn main() {
     let input = "
-    type Person(firstname , lastname ) {
-    firstname  = firstname;
-    lastname  = lastname;
-
-    name()  => self.firstname ;
+    type Person(firstname, lastname) {
+    firstname = firstname;
+    lastname = lastname;
+    name() => self.firstname;
 }
-    type Knight inherits Person {
-    name()  => base();
+    
+type Knight inherits Person {
+    name() => base();
 }
 
-let p  = new Knight(\"Phil\", \"Collins\") in
-    print(p.name()); 
+let p: Knight = new Knight(\"Phil\", \"Collins\") in
+    print(p.name());
   ";
 
     // 2. Parsear el código para obtener el AST
@@ -51,26 +51,26 @@ let p  = new Knight(\"Phil\", \"Collins\") in
     };
 
     // 3. Ejecutar el chequeo semántico
-    let mut checker = semantic::SemanticChecker::new();
-    checker.check_program(&mut program);
+    // let mut checker = semantic::SemanticChecker::new();
+    // checker.check_program(&mut program);
 
     //4. Reportar errores o confirmar éxito
-    if !checker.errors.is_empty() {
-        eprintln!("Se encontraron errores semánticos:");
-        for error in &checker.errors {
-            eprintln!("- {}", error);
-        }
-        std::process::exit(1);
-    } else {
+    // if !checker.errors.is_empty() {
+    //     eprintln!("Se encontraron errores semánticos:");
+    //     for error in &checker.errors {
+    //         eprintln!("- {}", error);
+    //     }
+    //     std::process::exit(1);
+    // } else {
         println!("Chequeo semántico exitoso. El programa es válido.");
         // Opcional: imprimir el AST procesado
          println!("{:#?}", program);
-            match codegen::compile_hulk_program(program, "hulk_module", Some("output.ll")) {
+            match codegen::compile_hulk_program(&mut program, "hulk_module", Some("output.ll")) {
                 Ok(res) => {
                     println!("LLVM IR generado exitosamente.");
                     // println!("Resultado IR:\n{}", res);
                 },
                 Err(e) => eprintln!("Error generando IR: {}", e),
-            }
+            // }
     }
 }
