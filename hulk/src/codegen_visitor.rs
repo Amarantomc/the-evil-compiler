@@ -6,8 +6,10 @@ use crate::nodes::destassing_node::DestAssignNode;
 use crate::nodes::for_node::ForNode;
 use crate::nodes::funcall_node::FunCallNode;
 use crate::nodes::if_node::IfNode;
+use crate::nodes::instantiation_node::InstantiationNode;
 use crate::nodes::let_node::LetNode;
 use crate::nodes::expr_node::{Expr, HulkType};
+use crate::nodes::member_access_node::{MemberAccessNode, MethodCallNode};
 use crate::nodes::unaryop_node::UnaryOp;
 use crate::nodes::while_node::WhileNode;
 use crate::nodes::literal_node::Literal;
@@ -25,9 +27,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
     fn visit_binary_op(
         &mut self,
-        left: & Expr,
+        left: &mut Expr,
         op: &BinaryOp,
-        right: & Expr,
+        right: & mut Expr,
     ) -> GeneratorResult {
         let l = left.accept(self);
         let r = right.accept(self);
@@ -59,17 +61,17 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(res_reg, res_type.to_string())
     }
 
-    fn visit_block(&mut self, node: &BlockNode) -> GeneratorResult {
+    fn visit_block(&mut self, node: &mut BlockNode) -> GeneratorResult {
         let mut last_res = GeneratorResult::new("0.0".to_string(), "double".to_string());
         self.push_scope();
-        for expr in &node.expressions {
+        for expr in &mut node.expressions {
             last_res = expr.accept(self);
         }
         self.pop_scope();
         last_res
     }
 
-    fn visit_while(&mut self, node: &WhileNode) -> GeneratorResult {
+    fn visit_while(&mut self, node: &mut WhileNode) -> GeneratorResult {
         let cond_label  = self.next_label("while_cond");
         let body_label  = self.next_label("while_body");
         let end_label   = self.next_label("while_end");
@@ -94,7 +96,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(final_val, "double".to_string())
     }
 
-    fn visit_if(&mut self, node: &IfNode) -> GeneratorResult {
+    fn visit_if(&mut self, node: &mut IfNode) -> GeneratorResult {
         let then_label  = self.next_label("if_then");
         let else_label  = self.next_label("if_else");
         let merge_label = self.next_label("if_merge");
@@ -123,9 +125,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(res_reg, then_res.llvm_type)
     }
 
-    fn visit_let(&mut self, node: &LetNode) -> GeneratorResult {
+    fn visit_let(&mut self, node: &mut LetNode) -> GeneratorResult {
         self.push_scope();
-        for ((name_node, hulk_type), expr) in &node.assignments {
+        for ((name_node, hulk_type), expr) in &mut node.assignments {
             let val = expr.accept(self);
             if let Literal::Id(name) = &name_node.value {
                 let ptr = self.next_temp();
@@ -169,10 +171,10 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         }
     }
 
-    fn visit_dest_assign(&mut self, node: &DestAssignNode) -> GeneratorResult {
+    fn visit_dest_assign(&mut self, node: &mut DestAssignNode) -> GeneratorResult {
         let val = node.expr.accept(self);
 
-        match &node.target.as_ref() {
+        match &mut node.target.as_mut() {
             Expr::Literal(lit_node) => {
                 if let Literal::Id(name) = &lit_node.value {
                     if let Some((ptr, ty)) = self.resolve_variable(name) {
@@ -207,9 +209,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         }
     }
 
-    fn visit_fun_call(&mut self, node: &FunCallNode) -> GeneratorResult {
+    fn visit_fun_call(&mut self, node: &mut FunCallNode) -> GeneratorResult {
         let mut args = Vec::new();
-        for arg_expr in &node.args {
+        for arg_expr in &mut node.args {
             args.push(arg_expr.accept(self));
         }
 
@@ -259,11 +261,11 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
 
-     fn visit_for(&mut self, node: &ForNode) -> GeneratorResult {
+     fn visit_for(&mut self, node: &mut ForNode) -> GeneratorResult {
         // El parser construye el iterador como FunCall("range", [start, end]).
         // No existe una funcion `range` real; extraemos los dos argumentos
         // directamente del nodo y generamos un loop con contador en IR.
-        let (start_res, end_res) = match &node.iterator.as_ref() {
+        let (start_res, end_res) = match &mut node.iterator.as_mut() {
             Expr::FunCall(call) => {
                 if call.args.len() == 2 {
                     let s = call.args[0].accept(self);
@@ -338,7 +340,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(final_val, "double".to_string())
     }
 
-    fn visit_unary_op(&mut self, op: &UnaryOp, expr: & Expr) -> GeneratorResult {
+    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &mut Expr) -> GeneratorResult {
         let val = expr.accept(self);
         let res_reg = self.next_temp();
         let (instr, res_ty) = match op {
@@ -363,10 +365,10 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
     fn visit_instantiation(
         &mut self,
-        node: &crate::nodes::instantiation_node::InstantiationNode,
+        node: &mut InstantiationNode,
     ) -> GeneratorResult {
         let mut args = Vec::new();
-        for arg_expr in &node.args {
+        for arg_expr in &mut node.args {
             args.push(arg_expr.accept(self));
         }
 
@@ -389,7 +391,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     /// El índice del campo incluye +1 por el vptr en posición 0.
     fn visit_member_access(
         &mut self,
-        node: &crate::nodes::member_access_node::MemberAccessNode,
+        node: &mut MemberAccessNode,
     ) -> GeneratorResult {
         let inst_res = node.instance.accept(self);
 
@@ -448,13 +450,13 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     /// través del contenido del vptr.
     fn visit_method_call(
         &mut self,
-        node: &crate::nodes::member_access_node::MethodCallNode,
+        node: &mut MethodCallNode,
     ) -> GeneratorResult {
         // ---- 0.  Evaluar receiver y argumentos ----------------------------
         let inst_res = node.instance.accept(self);
 
         let mut arg_results = Vec::new();
-        for arg_expr in &node.call.args {
+        for arg_expr in &mut node.call.args {
             arg_results.push(arg_expr.accept(self));
         }
 
@@ -525,12 +527,13 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
     
-    fn visit_base_call(&mut self, args: &[ Expr]) -> GeneratorResult {
+    fn visit_base_call(&mut self, args: &mut [ Expr]) -> GeneratorResult {
         // Evaluar argumentos antes de cualquier emit para no intercalar instrucciones.
-        let arg_results: Vec<GeneratorResult> = args.iter()
-            .map(|a| a.accept(self))
-            .collect();
- 
+        let mut arg_results = Vec::new();
+        for arg in args {
+            arg_results.push(arg.accept(self));
+        }
+
         // Recuperar contexto: ¿en qué clase y en qué método estamos?
         let type_name = match self.current_type_context.clone() {
             Some(t) => t,

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::nodes::function_decl_node::FunctionDecl;
 use crate::nodes::literal_node::Literal;
 use crate::nodes::program_node::{Program, Statement};
-use crate::nodes::type_decl_node::TypeDeclNode;
+use crate::nodes::type_decl_node::{AttributeNode, TypeDeclNode};
 use crate::nodes::expr_node::{HulkType, Expr};
 
 // ---------------------------------------------------------------------------
@@ -52,20 +52,11 @@ pub struct VTableSlot {
 /// Información de una clase registrada en el CodeGenerator.
 #[derive(Debug, Clone)]
 pub struct ClassMeta {
-    /// Nombre de la clase padre, si la hay.
+
     pub parent: Option<String>,
-    /// Campos propios del struct LLVM (excluyendo el puntero a vtable).
-    /// Índice 0 en el struct real = puntero a vtable (siempre inyectado).
-    /// Índice k en own_fields = índice k+1 en el struct LLVM.
-    ///
-    /// Por qué excluir la vtable aquí:
-    ///   Separar "campos de datos" de "campo de metadatos" simplifica el
-    ///   cálculo de GEP en member_access y destassign; ambos usan
-    ///   `get_field_index`, que ya suma 1 internamente para saltar la vtable.
     pub own_fields: Vec<(String, String)>, // (nombre, tipo_llvm)
-    /// Tabla virtual de esta clase: lista ordenada de slots.
-    /// El índice en este vec corresponde al índice en la VTable global.
     pub vtable: Vec<VTableSlot>,
+    pub ctor_params: Vec<(String, String)>,
 }
 
 // ---------------------------------------------------------------------------
@@ -464,7 +455,7 @@ fn compile_vtable_global(generator: &mut CodeGenerator, class_name: &str) {
 //   4. @T_new(params) -> ptr          (constructor; vptr se inicializa aquí)
 //   5. @T_m(ptr %self, ...) -> ret    (métodos)
 // ---------------------------------------------------------------------------
-fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
+fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
     let type_name = decl.name.value.as_id();
  
     // ------------------------------------------------------------------
@@ -493,10 +484,25 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         parent_meta_clone.as_ref(),
         &decl.methods,
     );
- 
+    
     // Registrar ClassMeta del hijo.
+    // Calculamos los params efectivos: los propios del tipo o, si no tiene,
+    // los heredados del padre (herencia implícita de parámetros).
+    let effective_ctor_params: Vec<(String, String)> = if !decl.params.is_empty() {
+        decl.params.iter().map(|(p_name, p_type)| {
+            (p_name.value.as_id(), CodeGenerator::hulk_type_to_llvm(p_type))
+        }).collect()
+    } else {
+        // El hijo no declara parámetros: hereda los del padre implícitamente.
+        parent_name.as_deref()
+            .and_then(|pn| generator.class_meta.get(pn))
+            .map(|pm| pm.ctor_params.clone())
+            .unwrap_or_default()
+    };
+ 
     let meta = ClassMeta {
         parent: parent_name.clone(),
+        ctor_params: effective_ctor_params.clone(),
         own_fields: own_fields.clone(),
         vtable: vtable.clone(),
     };
@@ -542,12 +548,13 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
     // ------------------------------------------------------------------
     // 4.  Emitir constructor @T_new
     // ------------------------------------------------------------------
- 
-    // Parámetros del constructor = parámetros del tipo (de la declaración HULK).
-    // Si el tipo tiene padre con parámetros, también los incluimos.
-    let ctor_params: Vec<String> = decl.params.iter().map(|(p_name, p_type)| {
-        let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
-        format!("{} %param_{}", llvm_ty, p_name.value.as_id())
+    
+    // Parámetros del constructor = parámetros efectivos del tipo.
+    // Si el tipo no declara parámetros propios pero hereda de un padre con
+    // parámetros, usamos los parámetros del padre (herencia implícita).
+    // `effective_ctor_params` ya fue calculado arriba al construir ClassMeta.
+    let ctor_params: Vec<String> = effective_ctor_params.iter().map(|(p_name, llvm_ty)| {
+        format!("{} %param_{}", llvm_ty, p_name)
     }).collect();
  
     generator.emit_raw(format!(
@@ -555,7 +562,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         type_name, ctor_params.join(", ")
     ));
     generator.emit_raw("entry:".to_string());
- 
+    
     // Calcular tamaño con el "GEP null trick" clásico de LLVM.
     let size_ptr = generator.next_temp();
     let size_val = generator.next_temp();
@@ -605,11 +612,11 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
     // Separamos la lógica de inicialización del malloc en _init_fields para
     // poder reutilizarla desde el constructor hijo sin duplicar código.
     if let Some(ref parent_nm) = parent_name {
-        if let Some(ref inh) = decl.inheritance {
-            if let Some(ref parent_args) = inh.parent_args {
+        if let Some( inh) = & mut decl.inheritance {
+            if let Some( parent_args) = & mut inh.parent_args {
                 // El hijo pasa explícitamente los argumentos al padre.
-                let mut arg_strings = vec![format!("ptr {}", self_ptr)];
-                for arg_expr in parent_args {
+                let mut arg_strings =  vec![format!("ptr {}", self_ptr)];
+                for arg_expr in  parent_args {
                     let res = arg_expr.accept(generator);
                     arg_strings.push(format!("{} {}", res.llvm_type, res.register));
                 }
@@ -647,7 +654,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         .map(|pn| generator.collect_all_fields(pn).len())
         .unwrap_or(0);
  
-    for (attr_idx, attr) in decl.attributes.iter().enumerate() {
+    for (attr_idx, attr) in decl.attributes.iter_mut().enumerate() {
         // Índice real en el struct LLVM: 0=vptr, 1..parent_count=campos padre, etc.
         let struct_idx = 1 + parent_field_count + attr_idx;
         let field_llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
@@ -699,10 +706,10 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
  
     // Si tenemos padre, primero inicializamos sus campos.
     if let Some(ref parent_nm) = parent_name {
-        if let Some(ref inh) = decl.inheritance {
-            if let Some(ref parent_args) = inh.parent_args {
+        if let Some(inh) = &mut decl.inheritance {
+            if let Some( parent_args) = &mut inh.parent_args {
                 let mut arg_strings = vec!["ptr %self".to_string()];
-                for arg_expr in parent_args {
+                for arg_expr in  parent_args {
                     // Nota: en _init_fields los parámetros están como %param_xxx
                     // pero no tenemos scopes activos aquí; necesitamos un scope
                     // temporal.
@@ -749,7 +756,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         generator.define_variable(p_id, ptr, llvm_ty);
     }
  
-    for (attr_idx, attr) in decl.attributes.iter().enumerate() {
+    for (attr_idx, attr) in & mut decl.attributes.iter_mut().enumerate() {
         let struct_idx = 1 + parent_field_count + attr_idx;
         let field_llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
         let init_val = attr.initializer.accept(generator);
@@ -775,7 +782,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
     let old_type_ctx = generator.current_type_context.take();
     generator.current_type_context = Some(type_name.clone());
  
-    for method in &decl.methods {
+    for method in &mut decl.methods {
         let method_name = method.name.value.as_id();
         let return_type=CodeGenerator::hulk_type_to_llvm(&method.return_type);
         let mut method_params = vec!["ptr %self".to_string()];
@@ -817,7 +824,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
         //   dentro de un método accedes a `this->field` sin escribir `this->`.
         // ------------------------------------------------------------------
         let all_fields_for_method = generator.collect_all_fields(&type_name);
-        for (field_idx, (field_name, field_llvm_ty)) in all_fields_for_method.iter().enumerate() {
+        for (field_idx, (field_name, field_llvm_ty)) in &mut all_fields_for_method.iter().enumerate() {
             // Índice LLVM: +1 porque el índice 0 es el vptr.
             let struct_idx = field_idx + 1;
  
@@ -872,7 +879,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &TypeDeclNode) {
 // ---------------------------------------------------------------------------
 // compile_function_decl  (sin cambios respecto al original)
 // ---------------------------------------------------------------------------
-fn compile_function_decl(generator: &mut CodeGenerator, decl: &FunctionDecl) {
+fn compile_function_decl(generator: &mut CodeGenerator, decl: &mut FunctionDecl) {
     let name = decl.name.value.as_id();
     let return_type=CodeGenerator::hulk_type_to_llvm(&decl.return_type);
     
@@ -907,7 +914,7 @@ fn compile_function_decl(generator: &mut CodeGenerator, decl: &FunctionDecl) {
 // compile_hulk_program
 // ---------------------------------------------------------------------------
 pub fn compile_hulk_program(
-    program: Program,
+    program: &mut Program,
     _module_name: &str,
     ir_output: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
@@ -930,11 +937,11 @@ pub fn compile_hulk_program(
         "".to_string(),
     ];
 
-    let mut type_decls: Vec<&TypeDeclNode> = Vec::new();
-    let mut fun_decls:  Vec<&FunctionDecl> = Vec::new();
-    let mut expressions: Vec<&Expr>   = Vec::new();
+    let mut type_decls: Vec<&mut TypeDeclNode> = Vec::new();
+    let mut fun_decls:  Vec<&mut FunctionDecl> = Vec::new();
+    let mut expressions: Vec<&mut Expr>   = Vec::new();
 
-    for stmt in &program.statements {
+    for stmt in &mut program.statements {
         match stmt {
             Statement::TypeDecl(td)     => type_decls.push(td),
             Statement::FunctionDecl(fd) => fun_decls.push(fd),
@@ -943,23 +950,28 @@ pub fn compile_hulk_program(
     }
 
     // PASADA 1: tipos (structs + vtables + constructores + métodos)
-    for td in &type_decls {
-        compile_type_decl(&mut generator, td);
+    for td in &mut type_decls {
+        compile_type_decl(&mut generator,  td);
     }
 
     // PASADA 2: funciones globales
-    for fd in &fun_decls {
-        compile_function_decl(&mut generator, fd);
+    for fd in &mut fun_decls {
+        compile_function_decl(&mut generator,  fd);
     }
 
     // PASADA 3: expresiones de top-level en @main
     generator.emit_raw("define i32 @main() {".to_string());
     generator.emit_raw("entry:".to_string());
 
-    let top_exprs: Vec<GeneratorResult> = expressions
-        .into_iter()
-        .map(|e| e.accept(&mut generator))
-        .collect();
+    let mut top_exprs: Vec<GeneratorResult> = Vec::new();
+
+    for e in &mut expressions{
+        top_exprs.push(e.accept(&mut generator));
+    }
+    //  expressions
+    //     .into_iter()
+    //     .map(|e| e.accept(&mut generator))
+    //     .collect();
 
     let last_result = top_exprs.last().cloned().unwrap_or_else(|| {
         GeneratorResult::new("0".to_string(), "i32".to_string())

@@ -45,8 +45,8 @@ impl Expr {
     
     
 
-    pub fn accept<T>(&self, v: &mut impl ExprVisitor<T>) -> T {
-        match &self {
+    pub fn accept<T>(&mut self, v: &mut impl ExprVisitor<T>) -> T {
+        match self {
             Expr::Literal(node) => match &node.value {
                 Literal::Number(n) => v.visit_number(*n),
                 Literal::Bool(b) => v.visit_bool(*b),
@@ -54,8 +54,8 @@ impl Expr {
                 Literal::Id(id) => v.visit_id(id),
             },
             Expr::SelfRef => v.visit_self(),
-            Expr::Binary(node) => v.visit_binary_op(&node.left, &node.op, &node.right),
-            Expr::Unary(node) => v.visit_unary_op(&node.op, &node.expr),
+            Expr::Binary(node) => v.visit_binary_op(&mut node.left, &node.op, &mut node.right),
+            Expr::Unary(node) => v.visit_unary_op(&node.op, &mut node.expr),
             Expr::Let(node) => v.visit_let(node),
             Expr::If(node) => v.visit_if(node),
             Expr::While(node) => v.visit_while(node),
