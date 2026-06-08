@@ -1,12 +1,12 @@
 use lalrpop_util::lalrpop_mod;
 
-
 pub mod expr_visitor;
 lalrpop_mod!(grammar);
 pub mod codegen;
 pub mod codegen_visitor;
-pub mod semantic;
-pub  mod  nodes{
+pub mod type_inferrer;      // antes: semantic
+pub mod semantic;   // nuevo
+pub mod nodes {
     pub mod expr_node;
     pub mod function_decl_node;
     pub mod literal_node;
@@ -24,23 +24,16 @@ pub  mod  nodes{
     pub mod member_access_node;
     pub mod instantiation_node;
 }
+
 fn main() {
     let input = "
-    type Person(firstname, lastname) {
-    firstname = firstname;
-    lastname = lastname;
-    name() => self.firstname;
-}
-    
-type Knight inherits Person {
-    name() => base();
-}
+          
+          5 + ;
+          3* ;
+          print;
+    ";
 
-let p: Knight = new Knight(\"Phil\", \"Collins\") in
-    print(p.name());
-  ";
-
-    // 2. Parsear el código para obtener el AST
+    // ---- 1. Parseo --------------------------------------------------------
     let parser = grammar::ProgramParser::new();
     let mut program = match parser.parse(input) {
         Ok(ast) => ast,
@@ -50,27 +43,45 @@ let p: Knight = new Knight(\"Phil\", \"Collins\") in
         }
     };
 
-    // 3. Ejecutar el chequeo semántico
-     let mut checker = semantic::TypeInferrer::new();
-     checker.infer_program(&mut program);
+    // ---- 2. Inferencia de tipos -------------------------------------------
+    // El inferidor anota el AST con HulkType concretos y acumula solo errores
+    // estructurales (e.g. función no encontrada durante la generación de
+    // restricciones, que impediría seguir).
+    let mut inferrer = type_inferrer::TypeInferrer::new();
+    inferrer.infer_program(&mut program);
 
-    //4. Reportar errores o confirmar éxito
+    if !inferrer.inference_errors.is_empty() {
+        eprintln!("Errores durante la inferencia de tipos:");
+        for e in &inferrer.inference_errors {
+            eprintln!("  - {}", e);
+        }
+        std::process::exit(1);
+    }
+
+    // ---- 3. Chequeo semántico ---------------------------------------------
+    // El checker recibe el entorno construido por el inferidor (jerarquía de
+    // tipos, firmas de funciones) y el AST ya anotado, y verifica todas las
+    // reglas semánticas sobre los tipos resueltos.
+    //
+    // El entorno se mueve al checker: si necesitaras acceder a él después,
+    // añade un campo público o un getter.
+    let mut checker = semantic::SemanticChecker::new(inferrer.env);
+    checker.check_program(&program);
+
     if !checker.errors.is_empty() {
-         eprintln!("Se encontraron errores semánticos:");
-         for error in &checker.errors {
-             eprintln!("- {}", error);
-     }
-         std::process::exit(1);
-     } else {
-        println!("Chequeo semántico exitoso. El programa es válido.");
-        // Opcional: imprimir el AST procesado
-         println!("{:#?}", program);
-            match codegen::compile_hulk_program(&mut program, "hulk_module", Some("output.ll")) {
-                Ok(res) => {
-                    println!("LLVM IR generado exitosamente.");
-                    // println!("Resultado IR:\n{}", res);
-                },
-                Err(e) => eprintln!("Error generando IR: {}", e),
-            }
+        eprintln!("Errores semánticos:");
+        for e in &checker.errors {
+            eprintln!("  - {}", e);
+        }
+        std::process::exit(1);
+    }
+
+    // ---- 4. Generación de código ------------------------------------------
+    println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
+    println!("{:#?}", program);
+
+    match codegen::compile_hulk_program(&mut program, "hulk_module", Some("output.ll")) {
+        Ok(_)  => println!("LLVM IR generado exitosamente."),
+        Err(e) => eprintln!("Error generando IR: {}", e),
     }
 }
