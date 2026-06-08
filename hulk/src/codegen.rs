@@ -1,3 +1,4 @@
+
 use std::fs;
 use std::collections::HashMap;
 use crate::nodes::function_decl_node::FunctionDecl;
@@ -52,11 +53,24 @@ pub struct VTableSlot {
 /// Información de una clase registrada en el CodeGenerator.
 #[derive(Debug, Clone)]
 pub struct ClassMeta {
-
+    /// Nombre de la clase padre, si la hay.
     pub parent: Option<String>,
-    pub own_fields: Vec<(String, String)>, // (nombre, tipo_llvm)
-    pub vtable: Vec<VTableSlot>,
+    /// Parámetros del constructor: lista de (nombre, tipo_llvm).
+    /// Necesario para que los hijos que heredan parámetros implícitamente
+    /// puedan reconstruir la firma correcta de @T_new y @T_init_fields.
     pub ctor_params: Vec<(String, String)>,
+    /// Campos propios del struct LLVM (excluyendo el puntero a vtable).
+    /// Índice 0 en el struct real = puntero a vtable (siempre inyectado).
+    /// Índice k en own_fields = índice k+1 en el struct LLVM.
+    ///
+    /// Por qué excluir la vtable aquí:
+    ///   Separar "campos de datos" de "campo de metadatos" simplifica el
+    ///   cálculo de GEP en member_access y destassign; ambos usan
+    ///   `get_field_index`, que ya suma 1 internamente para saltar la vtable.
+    pub own_fields: Vec<(String, String)>, // (nombre, tipo_llvm)
+    /// Tabla virtual de esta clase: lista ordenada de slots.
+    /// El índice en este vec corresponde al índice en la VTable global.
+    pub vtable: Vec<VTableSlot>,
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +498,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
         parent_meta_clone.as_ref(),
         &decl.methods,
     );
-    
+ 
     // Registrar ClassMeta del hijo.
     // Calculamos los params efectivos: los propios del tipo o, si no tiene,
     // los heredados del padre (herencia implícita de parámetros).
@@ -499,7 +513,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
             .map(|pm| pm.ctor_params.clone())
             .unwrap_or_default()
     };
- 
+
     let meta = ClassMeta {
         parent: parent_name.clone(),
         ctor_params: effective_ctor_params.clone(),
@@ -548,7 +562,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
     // ------------------------------------------------------------------
     // 4.  Emitir constructor @T_new
     // ------------------------------------------------------------------
-    
+ 
     // Parámetros del constructor = parámetros efectivos del tipo.
     // Si el tipo no declara parámetros propios pero hereda de un padre con
     // parámetros, usamos los parámetros del padre (herencia implícita).
@@ -562,7 +576,7 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
         type_name, ctor_params.join(", ")
     ));
     generator.emit_raw("entry:".to_string());
-    
+ 
     // Calcular tamaño con el "GEP null trick" clásico de LLVM.
     let size_ptr = generator.next_temp();
     let size_val = generator.next_temp();
@@ -597,13 +611,11 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
  
     // ---- Scope del constructor: parámetros disponibles (sin self) -------
     generator.push_scope();
-    for (p_name, p_type) in &decl.params {
-        let p_id = p_name.value.as_id();
-        let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+    for (p_id, llvm_ty) in &effective_ctor_params {
         let ptr = generator.next_temp();
         generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
         generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
-        generator.define_variable(p_id, ptr, llvm_ty);
+        generator.define_variable(p_id.clone(), ptr, llvm_ty.clone());
     }
  
     // ---- Inicializar campos del padre mediante llamada a _init_fields ----
@@ -626,14 +638,12 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
                 ));
             }
             // Si parent_args es None: el hijo hereda los mismos parámetros implícitamente.
-            // En ese caso propagamos todos los parámetros del tipo al padre.
+            // En ese caso propagamos todos los parámetros efectivos al padre.
             else {
                 let mut arg_strings = vec![format!("ptr {}", self_ptr)];
-                for (p_name, p_type) in &decl.params {
-                    let p_id = p_name.value.as_id();
-                    let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+                for (p_id, llvm_ty) in &effective_ctor_params {
                     // Leemos desde el alloca que ya generamos arriba.
-                    if let Some((ptr, _)) = generator.resolve_variable(&p_id) {
+                    if let Some((ptr, _)) = generator.resolve_variable(p_id) {
                         let loaded = generator.next_temp();
                         generator.emit(format!("{} = load {}, ptr {}", loaded, llvm_ty, ptr));
                         arg_strings.push(format!("{} {}", llvm_ty, loaded));
@@ -692,8 +702,8 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
     // ------------------------------------------------------------------
     let init_params: Vec<String> = {
         let mut v = vec!["ptr %self".to_string()];
-        v.extend(decl.params.iter().map(|(p_name, p_type)| {
-            format!("{} %param_{}", CodeGenerator::hulk_type_to_llvm(p_type), p_name.value.as_id())
+        v.extend(effective_ctor_params.iter().map(|(p_name, llvm_ty)| {
+            format!("{} %param_{}", llvm_ty, p_name)
         }));
         v
     };
@@ -714,13 +724,11 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
                     // pero no tenemos scopes activos aquí; necesitamos un scope
                     // temporal.
                     generator.push_scope();
-                    for (p_name, p_type) in &decl.params {
-                        let p_id = p_name.value.as_id();
-                        let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+                    for (p_id, llvm_ty) in &effective_ctor_params {
                         let ptr = generator.next_temp();
                         generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
                         generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
-                        generator.define_variable(p_id, ptr, llvm_ty);
+                        generator.define_variable(p_id.clone(), ptr, llvm_ty.clone());
                     }
                     let res = arg_expr.accept(generator);
                     arg_strings.push(format!("{} {}", res.llvm_type, res.register));
@@ -733,9 +741,8 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
             } else {
                 // Propagación implícita de parámetros.
                 let mut arg_strings = vec!["ptr %self".to_string()];
-                for (p_name, p_type) in &decl.params {
-                    let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
-                    arg_strings.push(format!("{} %param_{}", llvm_ty, p_name.value.as_id()));
+                for (p_id, llvm_ty) in &effective_ctor_params {
+                    arg_strings.push(format!("{} %param_{}", llvm_ty, p_id));
                 }
                 generator.emit(format!(
                     "call void @{}_init_fields({})",
@@ -747,13 +754,11 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
  
     // Inicializar campos propios de T.
     generator.push_scope();
-    for (p_name, p_type) in &decl.params {
-        let p_id = p_name.value.as_id();
-        let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+    for (p_id, llvm_ty) in &effective_ctor_params {
         let ptr = generator.next_temp();
         generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
         generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
-        generator.define_variable(p_id, ptr, llvm_ty);
+        generator.define_variable(p_id.clone(), ptr, llvm_ty.clone());
     }
  
     for (attr_idx, attr) in & mut decl.attributes.iter_mut().enumerate() {
