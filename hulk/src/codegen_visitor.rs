@@ -589,4 +589,12 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
  
         GeneratorResult::new(res_reg, return_type)
     }
+    
+    fn visit_type_downcast(&mut self, node: &mut crate::nodes::type_downcast_node::TypeDowncastNode) -> GeneratorResult {
+        todo!()
+    }
+    
+    fn visit_type_test(&mut self, node: &mut crate::nodes::type_test_node::TypeTestNode) -> GeneratorResult {
+        todo!()
+    }
 }

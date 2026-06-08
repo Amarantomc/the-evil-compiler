@@ -745,13 +745,11 @@ impl TypeInferrer {
     fn annotate_expr(&mut self, expr: &mut Expr) {
         match expr {
             Expr::Literal(_) | Expr::SelfRef => {}
-
             Expr::Binary(node) => {
                 self.annotate_expr(&mut node.left);
                 self.annotate_expr(&mut node.right);
                 node.return_type = self.infer_binary_type(&node.op);
             }
-
             Expr::Unary(node) => {
                 self.annotate_expr(&mut node.expr);
                 node.return_type = match node.op {
@@ -759,7 +757,6 @@ impl TypeInferrer {
                     UnaryOp::Neg | UnaryOp::Plus => HulkType::Number,
                 };
             }
-
             Expr::Let(node) => {
                 let mut scopes_opened = 0usize;
 
@@ -785,7 +782,6 @@ impl TypeInferrer {
 
                 for _ in 0..scopes_opened { self.env.pop_scope(); }
             }
-
             Expr::If(node) => {
                 self.annotate_expr(&mut node.condition);
                 self.annotate_expr(&mut node.if_branch);
@@ -799,13 +795,11 @@ impl TypeInferrer {
                 let else_ty = self.type_of_expr(&node.else_branch);
                 node.return_type = self.env.lca(&branch_ty, &else_ty);
             }
-
             Expr::While(node) => {
                 self.annotate_expr(&mut node.condition);
                 self.annotate_expr(&mut node.body);
                 node.return_type = self.type_of_expr(&node.body);
             }
-
             Expr::For(node) => {
                 self.annotate_expr(&mut node.iterator);
                 self.env.push_scope();
@@ -816,14 +810,12 @@ impl TypeInferrer {
                 node.return_type = self.type_of_expr(&node.body);
                 self.env.pop_scope();
             }
-
             Expr::Block(node) => {
                 for e in &mut node.expressions { self.annotate_expr(e); }
                 node.return_type = node.expressions.last()
                     .map(|e| self.type_of_expr(e))
                     .unwrap_or(HulkType::Unknown);
             }
-
             Expr::FunCall(node) => {
                 for arg in &mut node.args { self.annotate_expr(arg); }
                 if node.name.value.as_id() == "print" {
@@ -835,19 +827,16 @@ impl TypeInferrer {
                         .unwrap_or(HulkType::Unknown);
                 }
             }
-
             Expr::Instantiation(node) => {
                 for arg in &mut node.args { self.annotate_expr(arg); }
                 let type_name = node.name.value.as_id();
                 node.return_type = HulkType::Class(type_name);
             }
-
             Expr::DestAssign(node) => {
                 self.annotate_expr(&mut node.expr);
                 self.annotate_expr(&mut node.target);
                 node.return_type = self.type_of_expr(&node.expr);
             }
-
             Expr::MemberAccess(node) => {
                 self.annotate_expr(&mut node.instance);
                 let inst_ty = self.type_of_expr(&node.instance);
@@ -860,7 +849,6 @@ impl TypeInferrer {
                 } else { HulkType::Unknown };
                 node.set_type(result);
             }
-
             Expr::MethodCall(node) => {
                 self.annotate_expr(&mut node.instance);
                 for arg in &mut node.call.args { self.annotate_expr(arg); }
@@ -874,10 +862,11 @@ impl TypeInferrer {
                 node.call.return_type = result.clone();
                 node.set_type(result);
             }
-
             Expr::BaseCall(args) => {
                 for arg in args.iter_mut() { self.annotate_expr(arg); }
             }
+Expr::TypeDowncast(type_downcast_node) => todo!(),
+            Expr::TypeTest(type_test_node) => todo!(),
         }
     }
 
@@ -908,6 +897,8 @@ impl TypeInferrer {
             Expr::MemberAccess(n)  => n.return_type.clone(),
             Expr::MethodCall(n)    => n.return_type.clone(),
             Expr::BaseCall(_)      => HulkType::Unknown,
+            Expr::TypeDowncast(type_downcast_node) => todo!(),
+            Expr::TypeTest(type_test_node) => todo!(),
         }
     }
 
@@ -1238,5 +1229,13 @@ impl ExprVisitor<InferType> for TypeInferrer {
             Some(mi) => mi.return_type,
             None     => self.var_gen.fresh(),
         }
+    }
+    
+    fn visit_type_downcast(&mut self, node: &mut crate::nodes::type_downcast_node::TypeDowncastNode) -> InferType {
+        todo!()
+    }
+    
+    fn visit_type_test(&mut self, node: &mut crate::nodes::type_test_node::TypeTestNode) -> InferType {
+        todo!()
     }
 }

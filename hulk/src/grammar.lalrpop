@@ -16,6 +16,8 @@ use crate::nodes::{
     expr_node::{Expr, HulkType},
     unaryop_node::{UnaryOp, UnaryOpNode},
     while_node::WhileNode,
+    type_test_node::TypeTestNode,
+    type_downcast_node::TypeDowncastNode
 };
 
 grammar;
@@ -179,7 +181,6 @@ pub ConcExpr : Expr = {
     OrExpr,
 };
 
-
 ConcOpcode: BinaryOp = {
     "@" => BinaryOp::SingleConc,
     "@@" => BinaryOp::SpacedConc
@@ -217,10 +218,10 @@ AssignExpr: Expr = {
 };
 
 pub CompExpr: Expr = {
-    <l:CompExpr> <op:CompOpcode> <r:ArithExpr> => {
+    <l:CompExpr> <op:CompOpcode> <r:IsExpr> => {
         Expr::Binary(BinaryOpNode::new(l, op, r))
     },
-    ArithExpr,
+    IsExpr,
 };
 
 CompOpcode: BinaryOp = { 
@@ -230,6 +231,20 @@ CompOpcode: BinaryOp = {
     "<=" => BinaryOp::Lequa,
     ">" => BinaryOp::Great,
     "<" => BinaryOp::Less
+};
+
+pub IsExpr: Expr = {
+    <l:IsExpr> "is" <r:Ident> => {
+        Expr::TypeTest(TypeTestNode::new(l,r))
+    },
+    AsExpr,
+};
+
+pub AsExpr: Expr = {
+    <l:AsExpr> "as" <r:Ident> => {
+        Expr::TypeDowncast(TypeDowncastNode::new(l,r))
+    },
+    ArithExpr,
 };
 
 pub ArithExpr: Expr = {
