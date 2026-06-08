@@ -1,4 +1,4 @@
-use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, member_access_node::{MemberAccessNode, MethodCallNode}, expr_node::Expr, unaryop_node::UnaryOp, while_node::WhileNode};
+use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::Expr, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, member_access_node::{MemberAccessNode, MethodCallNode}, type_downcast_node::TypeDowncastNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode};
 
  
 
@@ -21,4 +21,6 @@ pub trait ExprVisitor<T> {
     fn visit_method_call(&mut self, node: &mut MethodCallNode) -> T;
     fn visit_self(&mut self) -> T;
     fn visit_base_call(&mut self, args: &mut [Expr]) -> T;
+    fn visit_type_downcast(&mut self, node: &mut TypeDowncastNode) -> T;
+    fn visit_type_test(&mut self, node: &mut TypeTestNode) -> T;
 }

@@ -1,4 +1,4 @@
-use crate::{expr_visitor::ExprVisitor, nodes::{binaryop_node::BinaryOpNode, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, literal_node::{Literal, LiteralNode}, member_access_node::{MemberAccessNode, MethodCallNode}, unaryop_node::UnaryOpNode, while_node::WhileNode}};
+﻿use crate::{expr_visitor::ExprVisitor, nodes::{binaryop_node::BinaryOpNode, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, literal_node::{Literal, LiteralNode}, member_access_node::{MemberAccessNode, MethodCallNode}, type_downcast_node::TypeDowncastNode, type_test_node::TypeTestNode, unaryop_node::UnaryOpNode, while_node::WhileNode}};
 
 
 
@@ -29,7 +29,9 @@ pub enum Expr {
     MemberAccess(MemberAccessNode),
     MethodCall(MethodCallNode),
     SelfRef,
-    BaseCall(Vec<Expr>), 
+    BaseCall(Vec<Expr>),
+    TypeDowncast(TypeDowncastNode),
+    TypeTest(TypeTestNode), 
 }
 
 
@@ -67,6 +69,8 @@ impl Expr {
             Expr::MemberAccess(node) => v.visit_member_access(node),
             Expr::MethodCall(node) => v.visit_method_call(node),
             Expr::BaseCall(typed_exprs) => v.visit_base_call(typed_exprs),
+            Expr::TypeDowncast(type_downcast_node) => v.visit_type_downcast(type_downcast_node),
+            Expr::TypeTest(type_test_node) => v.visit_type_test(type_test_node),
         }
     }
 }

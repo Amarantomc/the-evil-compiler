@@ -23,14 +23,18 @@ pub mod nodes {
     pub mod type_decl_node;
     pub mod member_access_node;
     pub mod instantiation_node;
+    pub mod type_downcast_node;
+    pub mod type_test_node;
 }
 
 fn main() {
     let input = "
-          
-          5 + ;
-          3* ;
-          print;
+let x = new Superman() in
+    print(
+        if (x is Bird) \"It's bird!\"
+        elif (x is Plane) \"It's a plane!\"
+        else \"No, it's Superman!\"
+    );
     ";
 
     // ---- 1. Parseo --------------------------------------------------------
@@ -47,16 +51,17 @@ fn main() {
     // El inferidor anota el AST con HulkType concretos y acumula solo errores
     // estructurales (e.g. función no encontrada durante la generación de
     // restricciones, que impediría seguir).
-    let mut inferrer = type_inferrer::TypeInferrer::new();
-    inferrer.infer_program(&mut program);
+    
+// let mut inferrer = type_inferrer::TypeInferrer::new();
+//     inferrer.infer_program(&mut program);
 
-    if !inferrer.inference_errors.is_empty() {
-        eprintln!("Errores durante la inferencia de tipos:");
-        for e in &inferrer.inference_errors {
-            eprintln!("  - {}", e);
-        }
-        std::process::exit(1);
-    }
+//     if !inferrer.inference_errors.is_empty() {
+//         eprintln!("Errores durante la inferencia de tipos:");
+//         for e in &inferrer.inference_errors {
+//             eprintln!("  - {}", e);
+//         }
+//         std::process::exit(1);
+// }
 
     // ---- 3. Chequeo semántico ---------------------------------------------
     // El checker recibe el entorno construido por el inferidor (jerarquía de
@@ -65,23 +70,23 @@ fn main() {
     //
     // El entorno se mueve al checker: si necesitaras acceder a él después,
     // añade un campo público o un getter.
-    let mut checker = semantic::SemanticChecker::new(inferrer.env);
-    checker.check_program(&program);
+    // let mut checker = semantic::SemanticChecker::new(inferrer.env);
+    // checker.check_program(&program);
 
-    if !checker.errors.is_empty() {
-        eprintln!("Errores semánticos:");
-        for e in &checker.errors {
-            eprintln!("  - {}", e);
-        }
-        std::process::exit(1);
-    }
+    // if !checker.errors.is_empty() {
+    //     eprintln!("Errores semánticos:");
+    //     for e in &checker.errors {
+    //         eprintln!("  - {}", e);
+    //     }
+    //     std::process::exit(1);
+    // }
 
     // ---- 4. Generación de código ------------------------------------------
     println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
     println!("{:#?}", program);
 
-    match codegen::compile_hulk_program(&mut program, "hulk_module", Some("output.ll")) {
-        Ok(_)  => println!("LLVM IR generado exitosamente."),
-        Err(e) => eprintln!("Error generando IR: {}", e),
-    }
+    // match codegen::compile_hulk_program(&mut program, "hulk_module", Some("output.ll")) {
+    //     Ok(_)  => println!("LLVM IR generado exitosamente."),
+    //     Err(e) => eprintln!("Error generando IR: {}", e),
+    // }
 }

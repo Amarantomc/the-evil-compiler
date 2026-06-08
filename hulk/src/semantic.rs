@@ -213,14 +213,7 @@ impl SemanticChecker {
 
     fn check_expr(&mut self, expr: &Expr) {
         match expr {
-            // -----------------------------------------------------------
-            // Literales — siempre válidos
-            // -----------------------------------------------------------
             Expr::Literal(_) => {}
-
-            // -----------------------------------------------------------
-            // `self` — solo válido dentro de un método
-            // -----------------------------------------------------------
             Expr::SelfRef => {
                 if self.self_type.is_none() {
                     self.errors.push(
@@ -228,10 +221,6 @@ impl SemanticChecker {
                     );
                 }
             }
-
-            // -----------------------------------------------------------
-            // Operadores binarios
-            // -----------------------------------------------------------
             Expr::Binary(node) => {
                 self.check_expr(&node.left);
                 self.check_expr(&node.right);
@@ -268,10 +257,6 @@ impl SemanticChecker {
                     }
                 }
             }
-
-            // -----------------------------------------------------------
-            // Operadores unarios
-            // -----------------------------------------------------------
             Expr::Unary(node) => {
                 self.check_expr(&node.expr);
                 let t = self.type_of(&node.expr);
@@ -284,10 +269,6 @@ impl SemanticChecker {
                     }
                 }
             }
-
-            // -----------------------------------------------------------
-            // `let`
-            // -----------------------------------------------------------
             Expr::Let(node) => {
                 let mut scopes_opened = 0usize;
 
@@ -324,10 +305,6 @@ impl SemanticChecker {
 
                 for _ in 0..scopes_opened { self.pop_scope(); }
             }
-
-            // -----------------------------------------------------------
-            // `if / elif / else`
-            // -----------------------------------------------------------
             Expr::If(node) => {
                 self.check_expr(&node.condition);
                 let cond_ty = self.type_of(&node.condition);
@@ -344,20 +321,12 @@ impl SemanticChecker {
 
                 self.check_expr(&node.else_branch);
             }
-
-            // -----------------------------------------------------------
-            // `while`
-            // -----------------------------------------------------------
             Expr::While(node) => {
                 self.check_expr(&node.condition);
                 let cond_ty = self.type_of(&node.condition);
                 self.expect_type(&cond_ty, &HulkType::Bool, "condición de 'while'");
                 self.check_expr(&node.body);
             }
-
-            // -----------------------------------------------------------
-            // `for`
-            // -----------------------------------------------------------
             Expr::For(node) => {
                 self.check_expr(&node.iterator);
                 self.push_scope();
@@ -367,17 +336,9 @@ impl SemanticChecker {
                 self.check_expr(&node.body);
                 self.pop_scope();
             }
-
-            // -----------------------------------------------------------
-            // Bloque
-            // -----------------------------------------------------------
             Expr::Block(node) => {
                 for e in &node.expressions { self.check_expr(e); }
             }
-
-            // -----------------------------------------------------------
-            // Llamada a función
-            // -----------------------------------------------------------
             Expr::FunCall(node) => {
                 for arg in &node.args { self.check_expr(arg); }
 
@@ -415,10 +376,6 @@ impl SemanticChecker {
                     }
                 }
             }
-
-            // -----------------------------------------------------------
-            // Instanciación
-            // -----------------------------------------------------------
             Expr::Instantiation(node) => {
                 for arg in &node.args { self.check_expr(arg); }
 
@@ -462,10 +419,6 @@ impl SemanticChecker {
                     }
                 }
             }
-
-            // -----------------------------------------------------------
-            // Asignación destructiva `:=`
-            // -----------------------------------------------------------
             Expr::DestAssign(node) => {
                 self.check_expr(&node.expr);
                 let val_ty = self.type_of(&node.expr);
@@ -525,10 +478,6 @@ impl SemanticChecker {
                     }
                 }
             }
-
-            // -----------------------------------------------------------
-            // Acceso a campo `expr.campo`
-            // -----------------------------------------------------------
             Expr::MemberAccess(node) => {
                 self.check_expr(&node.instance);
                 let inst_ty = self.type_of(&node.instance);
@@ -551,10 +500,6 @@ impl SemanticChecker {
                     }
                 }
             }
-
-            // -----------------------------------------------------------
-            // Llamada a método `expr.metodo(args...)`
-            // -----------------------------------------------------------
             Expr::MethodCall(node) => {
                 self.check_expr(&node.instance);
                 for arg in &node.call.args { self.check_expr(arg); }
@@ -601,10 +546,6 @@ impl SemanticChecker {
                     }
                 }
             }
-
-            // -----------------------------------------------------------
-            // `base(args...)`
-            // -----------------------------------------------------------
             Expr::BaseCall(args) => {
                 for arg in args { self.check_expr(arg); }
 
@@ -641,7 +582,9 @@ impl SemanticChecker {
                     ));
                 }
             }
-        }
+            Expr::TypeDowncast(type_downcast_node) => todo!(),
+            Expr::TypeTest(type_test_node) => todo!(),
+                    }
     }
 
     // ========================================================================
@@ -692,6 +635,8 @@ impl SemanticChecker {
             Expr::MemberAccess(n)  => n.return_type.clone(),
             Expr::MethodCall(n)    => n.return_type.clone(),
             Expr::BaseCall(_)      => HulkType::Unknown,
+            Expr::TypeDowncast(type_downcast_node) => todo!(),
+            Expr::TypeTest(type_test_node) => todo!(),
         }
     }
 
