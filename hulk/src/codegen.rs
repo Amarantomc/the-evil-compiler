@@ -353,6 +353,29 @@ impl CodeGenerator {
         self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, r.register));
         GeneratorResult::new(buf, "ptr".to_string())
     }
+
+    pub fn collect_subtypes(&self, ancestor: &str) -> Vec<String> {
+        let mut result = Vec::new();
+        for name in self.class_meta.keys() {
+            if self.is_subtype_in_meta(name, ancestor) {
+                result.push(name.clone());
+            }
+        }
+        // Sort for deterministic IR output (easier to test/diff).
+        result.sort();
+        result
+    }
+ 
+    // Walk class_meta to test `child` is-a `ancestor`.
+    fn is_subtype_in_meta(&self, child: &str, ancestor: &str) -> bool {
+        if child == ancestor { return true; }
+        if let Some(meta) = self.class_meta.get(child) {
+            if let Some(ref parent) = meta.parent {
+                return self.is_subtype_in_meta(parent, ancestor);
+            }
+        }
+        false
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -933,12 +956,14 @@ pub fn compile_hulk_program(
         "declare i64 @strlen(ptr)".to_string(),
         "declare ptr @strcpy(ptr, ptr)".to_string(),
         "declare ptr @strcat(ptr, ptr)".to_string(),
+        "declare void @abort() noreturn".to_string(),
         "".to_string(),
         "declare i32 @printf(ptr, ...)".to_string(),
         "@.fmt_double = private unnamed_addr constant [4 x i8] c\"%g\\0A\\00\"".to_string(),
         "@.fmt_str    = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"".to_string(),
         "@.str_true   = private unnamed_addr constant [5 x i8] c\"true\\00\"".to_string(),
         "@.str_false  = private unnamed_addr constant [6 x i8] c\"false\\00\"".to_string(),
+        "@.str_cast_error = private unnamed_addr constant [43 x i8] c\"HULK runtime error: invalid downcast (as)\\0A\\00\"".to_string(),
         "".to_string(),
     ];
 
@@ -963,6 +988,14 @@ pub fn compile_hulk_program(
     for fd in &mut fun_decls {
         compile_function_decl(&mut generator,  fd);
     }
+
+    generator.emit_raw("define void @hulk_cast_error() noreturn {".to_string());
+    generator.emit_raw("entry:".to_string());
+    generator.emit("call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr @.str_cast_error)".to_string());
+    generator.emit("call void @abort()".to_string());
+    generator.emit("unreachable".to_string());
+    generator.emit_raw("}".to_string());
+    generator.emit_raw("".to_string());
 
     // PASADA 3: expresiones de top-level en @main
     generator.emit_raw("define i32 @main() {".to_string());

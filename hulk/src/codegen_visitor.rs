@@ -10,6 +10,8 @@ use crate::nodes::instantiation_node::InstantiationNode;
 use crate::nodes::let_node::LetNode;
 use crate::nodes::expr_node::{Expr, HulkType};
 use crate::nodes::member_access_node::{MemberAccessNode, MethodCallNode};
+use crate::nodes::type_downcast_node::TypeDowncastNode;
+use crate::nodes::type_test_node::TypeTestNode;
 use crate::nodes::unaryop_node::UnaryOp;
 use crate::nodes::while_node::WhileNode;
 use crate::nodes::literal_node::Literal;
@@ -590,11 +592,109 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(res_reg, return_type)
     }
     
-    fn visit_type_downcast(&mut self, node: &mut crate::nodes::type_downcast_node::TypeDowncastNode) -> GeneratorResult {
-        todo!()
+    fn visit_type_downcast(&mut self, node: &mut TypeDowncastNode) -> GeneratorResult {
+        let expr_res    = node.expr.accept(self);
+        let target_name = node.target_type.value.as_id();
+ 
+        // ---- Load vptr ---------------------------------------------------
+        let vptr_field = self.next_temp();
+        let vptr       = self.next_temp();
+ 
+        self.emit(format!("; downcast: {} as {}", expr_res.register, target_name));
+        self.emit(format!(
+            "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 0",
+            vptr_field, expr_res.llvm_type, expr_res.register
+        ));
+        self.emit(format!("{} = load ptr, ptr {}", vptr, vptr_field));
+ 
+        // ---- Conformance check (same logic as `is`) ----------------------
+        let subtypes = self.collect_subtypes(&target_name);
+ 
+        let is_ok_reg = if subtypes.is_empty() {
+            let r = self.next_temp();
+            self.emit(format!("{} = add i1 0, 0  ; unknown target, always false", r));
+            r
+        } else {
+            let mut cmp_regs: Vec<String> = Vec::new();
+            for subtype in &subtypes {
+                let cmp_reg = self.next_temp();
+                self.emit(format!(
+                    "{} = icmp eq ptr {}, @vtable_{}",
+                    cmp_reg, vptr, subtype
+                ));
+                cmp_regs.push(cmp_reg);
+            }
+            cmp_regs[1..].iter().fold(cmp_regs[0].clone(), |acc, cmp| {
+                let or_reg = self.next_temp();
+                self.emit(format!("{} = or i1 {}, {}", or_reg, acc, cmp));
+                or_reg
+            })
+        };
+ 
+        // ---- Branch: ok → continue; fail → runtime error ----------------
+        let ok_label   = self.next_label("cast_ok");
+        let fail_label = self.next_label("cast_fail");
+ 
+        self.emit(format!(
+            "br i1 {}, label %{}, label %{}",
+            is_ok_reg, ok_label, fail_label
+        ));
+ 
+        // cast_fail block
+        self.emit_label(fail_label);
+        self.emit("call void @hulk_cast_error()".to_string());
+        self.emit("unreachable".to_string());
+ 
+        // cast_ok block — pointer is valid, return it with target static type
+        self.emit_label(ok_label);
+ 
+        GeneratorResult::new(expr_res.register, target_name)
     }
     
-    fn visit_type_test(&mut self, node: &mut crate::nodes::type_test_node::TypeTestNode) -> GeneratorResult {
-        todo!()
+    fn visit_type_test(&mut self, node: &mut TypeTestNode) -> GeneratorResult {
+        // Evaluate the expression being tested.
+        let expr_res = node.expr.accept(self);
+        let target_name = node.target_type.value.as_id();
+ 
+        // ---- Load vptr from the object ------------------------------------
+        let vptr_field = self.next_temp();
+        let vptr       = self.next_temp();
+ 
+        self.emit(format!("; type test: {} is {}", expr_res.register, target_name));
+        self.emit(format!(
+            "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 0",
+            vptr_field, expr_res.llvm_type, expr_res.register
+        ));
+        self.emit(format!("{} = load ptr, ptr {}", vptr, vptr_field));
+ 
+        // ---- Collect all subtypes of target (including itself) ------------
+        let subtypes = self.collect_subtypes(&target_name);
+ 
+        if subtypes.is_empty() {
+            // Target type not in class_meta: always false at runtime.
+            let false_reg = self.next_temp();
+            self.emit(format!("{} = add i1 0, 0  ; unknown target, always false", false_reg));
+            return GeneratorResult::new(false_reg, "i1".to_string());
+        }
+ 
+        // ---- Compare vptr against each subtype's vtable ------------------
+        let mut cmp_regs: Vec<String> = Vec::new();
+        for subtype in &subtypes {
+            let cmp_reg = self.next_temp();
+            self.emit(format!(
+                "{} = icmp eq ptr {}, @vtable_{}",
+                cmp_reg, vptr, subtype
+            ));
+            cmp_regs.push(cmp_reg);
+        }
+ 
+        // ---- OR all comparisons together ---------------------------------
+        let result_reg = cmp_regs[1..].iter().fold(cmp_regs[0].clone(), |acc, cmp| {
+            let or_reg = self.next_temp();
+            self.emit(format!("{} = or i1 {}, {}", or_reg, acc, cmp));
+            or_reg
+        });
+ 
+        GeneratorResult::new(result_reg, "i1".to_string())
     }
 }
