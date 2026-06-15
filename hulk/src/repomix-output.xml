@@ -1,0 +1,5167 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+nodes/
+  binaryop_node.rs
+  block_node.rs
+  destassing_node.rs
+  expr_node.rs
+  for_node.rs
+  funcall_node.rs
+  function_decl_node.rs
+  if_node.rs
+  instantiation_node.rs
+  let_node.rs
+  literal_node.rs
+  member_access_node.rs
+  program_node.rs
+  type_decl_node.rs
+  type_downcast_node.rs
+  type_test_node.rs
+  unaryop_node.rs
+  while_node.rs
+ast.rs
+codegen_visitor.rs
+codegen.rs
+expr_visitor.rs
+grammar.lalrpop
+main.rs
+semantic.rs
+type_inferrer.rs
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="nodes/binaryop_node.rs">
+use crate::nodes::expr_node::{Expr, HulkType};
+
+
+
+#[derive(Debug, Clone, Copy)]
+pub enum BinaryOp {
+    Mul,
+    Div,
+    Add,
+    Sub,
+    Pow,
+    Equal,
+    Dist,
+    Gequa,
+    Lequa,
+    Great,
+    Less,
+    And,
+    Or,
+    Mod,
+    SingleConc,
+    SpacedConc,
+}
+
+#[derive(Debug)]
+pub struct BinaryOpNode {
+    pub left: Box<Expr>,
+    pub op: BinaryOp,
+    pub right: Box<Expr>,
+    pub return_type: HulkType,
+}
+
+impl BinaryOpNode {
+    pub fn new(left: Expr, op: BinaryOp, right: Expr) -> Self {
+        BinaryOpNode {
+            left: Box::new(left),
+            op,
+            right: Box::new(right),
+            return_type: HulkType::Unknown,
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/block_node.rs">
+use crate::nodes::expr_node::{Expr, HulkType};
+
+
+#[derive(Debug)]
+pub struct BlockNode {
+    pub expressions: Vec<Expr>,
+    pub return_type: HulkType,
+}
+
+impl BlockNode {
+    pub fn new(expressions: Vec<Expr>) -> Self {
+        BlockNode { expressions, return_type: HulkType::Unknown }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/destassing_node.rs">
+use crate::nodes::expr_node::{Expr, HulkType};
+
+
+#[derive(Debug)]
+pub struct DestAssignNode {
+    pub target: Box<Expr>,
+    pub expr: Box<Expr>,
+    pub return_type: HulkType,
+}
+
+impl DestAssignNode {
+    pub fn new(target: Expr, expr: Expr) -> Self {
+        DestAssignNode {
+            target: Box::new(target),
+            expr: Box::new(expr),
+            return_type: HulkType::Unknown
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/expr_node.rs">
+use crate::{expr_visitor::ExprVisitor, nodes::{binaryop_node::BinaryOpNode, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, literal_node::{Literal, LiteralNode}, member_access_node::{MemberAccessNode, MethodCallNode}, type_downcast_node::TypeDowncastNode, type_test_node::TypeTestNode, unaryop_node::UnaryOpNode, while_node::WhileNode}};
+
+
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HulkType {
+    Number,
+    Bool,
+    String,
+    Class(String),
+    Unknown,
+}
+
+// Representa todo tipo de expresión en el lenguaje
+#[derive(Debug)]
+pub enum Expr {
+    Let(LetNode),
+    If(IfNode),
+    While(WhileNode),
+    For(ForNode),
+    FunCall(FunCallNode),
+    DestAssign(DestAssignNode),
+    Binary(BinaryOpNode),
+    Unary(UnaryOpNode),
+    Literal(LiteralNode),
+    Block(BlockNode),
+    Instantiation(InstantiationNode),
+    MemberAccess(MemberAccessNode),
+    MethodCall(MethodCallNode),
+    SelfRef,
+    BaseCall(Vec<Expr>),
+    TypeDowncast(TypeDowncastNode),
+    TypeTest(TypeTestNode), 
+}
+
+
+
+
+ 
+
+
+
+
+impl Expr {
+     
+    
+    
+
+    pub fn accept<T>(&mut self, v: &mut impl ExprVisitor<T>) -> T {
+        match self {
+            Expr::Literal(node) => match &node.value {
+                Literal::Number(n) => v.visit_number(*n),
+                Literal::Bool(b) => v.visit_bool(*b),
+                Literal::Str(s) => v.visit_string(s),
+                Literal::Id(id) => v.visit_id(id),
+            },
+            Expr::SelfRef => v.visit_self(),
+            Expr::Binary(node) => v.visit_binary_op(&mut node.left, &node.op, &mut node.right),
+            Expr::Unary(node) => v.visit_unary_op(&node.op, &mut node.expr),
+            Expr::Let(node) => v.visit_let(node),
+            Expr::If(node) => v.visit_if(node),
+            Expr::While(node) => v.visit_while(node),
+            Expr::For(node) => v.visit_for(node),
+            Expr::FunCall(node) => v.visit_fun_call(node),
+            Expr::DestAssign(node) => v.visit_dest_assign(node),
+            Expr::Block(node) => v.visit_block(node),
+            Expr::Instantiation(node) => v.visit_instantiation(node),
+            Expr::MemberAccess(node) => v.visit_member_access(node),
+            Expr::MethodCall(node) => v.visit_method_call(node),
+            Expr::BaseCall(typed_exprs) => v.visit_base_call(typed_exprs),
+            Expr::TypeDowncast(type_downcast_node) => v.visit_type_downcast(type_downcast_node),
+            Expr::TypeTest(type_test_node) => v.visit_type_test(type_test_node),
+        }
+    }
+}
+</file>
+
+<file path="nodes/for_node.rs">
+use crate::nodes::{expr_node::{Expr, HulkType}, literal_node::LiteralNode};
+
+
+#[derive(Debug)]
+pub struct ForNode {
+    pub variable: LiteralNode,
+    pub iterator: Box<Expr>,
+    pub body: Box<Expr>,
+    pub return_type: HulkType,
+}
+
+impl ForNode {
+    pub fn new(variable: LiteralNode, iterator: Expr, body: Expr) -> Self {
+        ForNode {
+            variable,
+            iterator: Box::new(iterator),
+            body: Box::new(body),
+            return_type: HulkType::Unknown,
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/funcall_node.rs">
+use crate::nodes::{expr_node::{Expr, HulkType}, literal_node::LiteralNode};
+
+
+#[derive(Debug)]
+pub struct FunCallNode {
+    pub name: LiteralNode,
+    pub args: Vec<Expr>,
+    pub return_type: HulkType
+}
+
+impl FunCallNode {
+    pub fn new(name: LiteralNode, args: Vec<Expr>) -> Self {
+        FunCallNode { name, args, return_type: HulkType::Unknown }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/function_decl_node.rs">
+use crate::nodes::{literal_node::LiteralNode,expr_node::Expr, expr_node::HulkType};
+
+
+
+#[derive(Debug)]
+pub struct FunctionDecl {
+    pub name: LiteralNode,
+    pub params: Vec<(LiteralNode, HulkType)>,
+    pub body: Expr,
+    pub return_type: HulkType,
+}
+
+impl FunctionDecl { //Revisar Grammar para return unkwon
+    pub fn new(name: LiteralNode, params: Vec<(LiteralNode,HulkType)>, body: Expr,return_type: HulkType ) -> Self {
+        FunctionDecl { name, params, body, return_type }
+    }
+}
+</file>
+
+<file path="nodes/if_node.rs">
+use crate::nodes::expr_node::{Expr, HulkType};
+
+
+#[derive(Debug)]
+pub struct IfNode {
+    pub condition: Box<Expr>,
+    pub if_branch: Box<Expr>,
+    pub elif_branches: Vec<(Expr, Expr)>,
+    pub else_branch: Box<Expr>,
+    pub return_type: HulkType,
+}
+
+impl IfNode {
+    pub fn new(condition: Expr, if_branch:Expr, elif_branches: Vec<(Expr, Expr)>, else_branch: Expr) -> Self {
+        IfNode {
+            condition: Box::new(condition),
+            if_branch: Box::new(if_branch),
+            elif_branches,
+            else_branch: Box::new(else_branch),
+            return_type: HulkType::Unknown
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/instantiation_node.rs">
+use crate::nodes::funcall_node::FunCallNode;
+
+// Reutilizamos FunCallNode para la instanciación ya que es sintácticamente igual a una llamada
+pub type InstantiationNode = FunCallNode;
+</file>
+
+<file path="nodes/let_node.rs">
+use crate::nodes::{literal_node::LiteralNode, expr_node::{HulkType, Expr}};
+
+
+#[derive(Debug)]
+pub struct LetNode {
+    pub assignments: Vec<((LiteralNode,HulkType), Expr)>,
+    pub body: Box<Expr>,
+    pub return_type: HulkType,
+}
+
+impl LetNode {
+    pub fn new(assignments: Vec<((LiteralNode,HulkType), Expr)>, body: Expr) -> Self {
+        LetNode {
+            assignments,
+            body: Box::new(body),
+            return_type: HulkType::Unknown,
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/literal_node.rs">
+#[derive(Debug)]
+pub struct LiteralNode {
+    pub value: Literal,
+}
+
+impl LiteralNode {
+    pub fn new(value: Literal) -> Self {
+        LiteralNode { value }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Literal {
+    Number(f32),
+    Bool(bool),
+    Str(String),
+    Id(String)
+}
+
+impl Literal {
+    pub fn as_id(&self) -> String {
+        match self {
+            Literal::Id(s) => s.clone(),
+            _ => panic!("Expected Id"),
+        }
+    }
+}
+</file>
+
+<file path="nodes/member_access_node.rs">
+use crate::nodes::{expr_node::{Expr, HulkType}, funcall_node::FunCallNode, literal_node::LiteralNode};
+
+#[derive(Debug)]
+pub struct MemberAccessNode {
+    pub instance: Box<Expr>,
+    pub member: LiteralNode,
+    pub return_type: HulkType,
+}
+
+impl MemberAccessNode {
+    pub fn new(instance: Expr, member: LiteralNode) -> Self {
+        Self {
+            instance: Box::new(instance),
+            member,
+            return_type:HulkType::Unknown,
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+
+#[derive(Debug)]
+pub struct MethodCallNode {
+    pub instance: Box<Expr>,
+    pub call: FunCallNode,
+    pub return_type: HulkType,
+}
+
+impl MethodCallNode {
+    pub fn new(instance: Expr, call: FunCallNode) -> Self {
+        Self {
+            instance: Box::new(instance),
+            call,
+            return_type:HulkType::Unknown,
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/program_node.rs">
+use crate::nodes::{function_decl_node::FunctionDecl, expr_node::Expr, type_decl_node::TypeDeclNode};
+
+
+#[derive(Debug)]
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+impl Program {
+    pub fn new(statements: Vec<Statement>) -> Self {
+        Program { statements }
+    }
+}
+
+#[derive(Debug)]
+pub enum Statement {
+    FunctionDecl(FunctionDecl),
+    TypeDecl(TypeDeclNode),
+    Expression(Expr),
+}
+</file>
+
+<file path="nodes/type_decl_node.rs">
+use crate::nodes::{literal_node::LiteralNode, expr_node::{Expr, HulkType}, function_decl_node::FunctionDecl};
+
+#[derive(Debug)]
+pub struct AttributeNode {
+    pub name: LiteralNode,
+    pub type_annotation: HulkType,
+    pub initializer: Expr,
+     
+}
+
+impl AttributeNode {
+    pub fn new(name: LiteralNode, type_annotation: HulkType, initializer: Expr) -> Self {
+        Self { name, type_annotation, initializer }
+    }
+    
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.type_annotation = node_type;
+    }
+     
+}
+
+#[derive(Debug)]
+pub struct InheritanceClause {
+    pub parent_name: LiteralNode,
+    pub parent_args: Option<Vec<Expr>>, // None = heredar argumentos implícitamente
+}
+
+impl InheritanceClause {
+    pub fn new(parent_name: LiteralNode, parent_args: Option<Vec<Expr>>) -> Self {
+        Self { parent_name, parent_args }
+    }
+}
+
+#[derive(Debug)]
+pub struct TypeDeclNode {
+    pub name: LiteralNode,
+    pub params: Vec<(LiteralNode, HulkType)>,
+    pub attributes: Vec<AttributeNode>,
+    pub methods: Vec<FunctionDecl>,
+    pub inheritance: Option<InheritanceClause>,
+}
+
+pub enum TypeBodyItem {
+    Assignment(AttributeNode),
+    FunctionDecl(FunctionDecl),
+}
+
+impl TypeDeclNode {
+    pub fn new(name: LiteralNode, params: Vec<(LiteralNode, HulkType)>, attributes: Vec<AttributeNode>, methods: Vec<FunctionDecl>) -> Self {
+        Self { name, params, attributes, methods, inheritance: None }
+    }
+
+    pub fn with_inheritance(name: LiteralNode, params: Vec<(LiteralNode, HulkType)>,attributes: Vec<AttributeNode>,methods: Vec<FunctionDecl>,inheritance: Option<InheritanceClause>) -> Self {
+        Self { name, params,attributes,methods,inheritance }
+    }
+}
+</file>
+
+<file path="nodes/type_downcast_node.rs">
+use crate::nodes::{expr_node::{Expr, HulkType}, literal_node::LiteralNode};
+
+
+#[derive(Debug)]
+pub struct TypeDowncastNode {
+      pub expr: Box<Expr>,
+      pub target_type: LiteralNode,
+      pub return_type: HulkType,
+}
+
+impl TypeDowncastNode {
+    pub fn new(expr: Expr, target_type: LiteralNode) -> Self {
+        TypeDowncastNode {
+            expr:Box::new(expr),
+            target_type,
+            return_type: HulkType::Unknown,
+        }
+    }
+     
+}
+</file>
+
+<file path="nodes/type_test_node.rs">
+use crate::nodes::{expr_node::{Expr, HulkType}, literal_node::{LiteralNode}};
+
+
+#[derive(Debug)]
+pub struct TypeTestNode {
+     pub expr: Box<Expr>,
+     pub  target_type: LiteralNode,
+     pub return_type: HulkType,
+}
+
+impl TypeTestNode {
+    pub fn new(expr:Expr, target_type: LiteralNode) -> Self {
+        TypeTestNode {
+            expr:Box::new(expr),
+            target_type,
+            return_type: HulkType::Unknown,
+        }
+    }
+     
+}
+</file>
+
+<file path="nodes/unaryop_node.rs">
+use crate::nodes::expr_node::{Expr, HulkType};
+
+
+#[derive(Debug, Clone, Copy)]
+pub enum UnaryOp {
+    Neg,
+    Not,
+    Plus,
+}
+
+#[derive(Debug)]
+pub struct UnaryOpNode {
+    pub op: UnaryOp,
+    pub expr: Box<Expr>,
+    pub return_type: HulkType,
+}
+
+impl UnaryOpNode {
+    pub fn new(op: UnaryOp, expr: Expr) -> Self {
+        UnaryOpNode {
+            op,
+            expr: Box::new(expr),
+            return_type: HulkType::Unknown
+        }
+    }
+    pub fn set_type(&mut self, node_type: HulkType) {
+        self.return_type = node_type;
+    }
+}
+</file>
+
+<file path="nodes/while_node.rs">
+use crate::nodes::expr_node::{Expr, HulkType};
+
+
+#[derive(Debug)]
+pub struct WhileNode {
+    pub condition: Box<Expr>,
+    pub body: Box<Expr>,
+    pub return_type: HulkType,
+}
+
+impl WhileNode {
+    pub fn new(condition: Expr, body: Expr) -> Self {
+        WhileNode {
+            condition: Box::new(condition),
+            body: Box::new(body),
+            return_type: HulkType::Unknown
+        }
+    }
+}
+</file>
+
+<file path="ast.rs">
+use crate::expr_visitor::ExprVisitor;
+
+#[derive(Debug)]
+pub struct Program {
+    pub statements: Vec<Statement>,
+}
+
+impl Program {
+    pub fn new(statements: Vec<Statement>) -> Self {
+        Program { statements }
+    }
+}
+
+#[derive(Debug)]
+pub enum Statement {
+    FunctionDecl(FunctionDecl),
+    TypeDecl(TypeDeclNode),
+    Expression(TypedExpr),
+}
+
+#[derive(Debug)]
+pub struct FunctionDecl {
+    pub name: LiteralNode,
+    pub params: Vec<(LiteralNode, HulkType)>,
+    pub body: TypedExpr,
+}
+
+impl FunctionDecl {
+    pub fn new(name: LiteralNode, params: Vec<(LiteralNode,HulkType)>, body: TypedExpr) -> Self {
+        FunctionDecl { name, params, body }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HulkType {
+    Number,
+    Bool,
+    String,
+    Class(String),
+    Unknown,
+}
+
+
+#[derive(Debug)]
+pub struct TypedExpr {
+    pub kind: Expr,
+    pub return_type: HulkType,
+}
+
+impl TypedExpr {
+    pub fn new(kind: Expr) -> Self {
+        TypedExpr {
+            kind,
+            return_type: HulkType::Unknown, // Por defecto es desconocido hasta la fase semántica
+        }
+    }
+    
+    // Opcional: un constructor si ya sabes el tipo desde el parseo
+    pub fn with_type(kind: Expr, return_type: HulkType) -> Self {
+        TypedExpr { kind, return_type }
+    }
+
+    pub fn accept<T>(&self, v: &mut impl ExprVisitor<T>) -> T {
+        match &self.kind {
+            Expr::Literal(node) => match &node.value {
+                Literal::Number(n) => v.visit_number(*n),
+                Literal::Bool(b) => v.visit_bool(*b),
+                Literal::Str(s) => v.visit_string(s),
+                Literal::Id(id) => v.visit_id(id),
+            },
+            Expr::Binary(node) => v.visit_binary_op(&node.left, &node.op, &node.right),
+            Expr::Unary(node) => v.visit_unary_op(&node.op, &node.expr),
+            Expr::Let(node) => v.visit_let(node),
+            Expr::If(node) => v.visit_if(node),
+            Expr::While(node) => v.visit_while(node),
+            Expr::For(node) => v.visit_for(node),
+            Expr::FunCall(node) => v.visit_fun_call(node),
+            Expr::DestAssign(node) => v.visit_dest_assign(node),
+            Expr::Block(node) => v.visit_block(node),
+            Expr::Instantiation(node) => v.visit_instantiation(node),
+            Expr::MemberAccess(node) => v.visit_member_access(node),
+            Expr::MethodCall(node) => v.visit_method_call(node),
+        }
+    }
+}
+
+// Representa todo tipo de expresión en el lenguaje
+#[derive(Debug)]
+pub enum Expr {
+    Let(LetNode),
+    If(IfNode),
+    While(WhileNode),
+    For(ForNode),
+    FunCall(FunCallNode),
+    DestAssign(DestAssignNode),
+    Binary(BinaryOpNode),
+    Unary(UnaryOpNode),
+    Literal(LiteralNode),
+    Block(BlockNode),
+    Instantiation(InstantiationNode),
+    MemberAccess(MemberAccessNode),
+    MethodCall(MethodCallNode),
+}
+
+#[derive(Debug)]
+pub struct MemberAccessNode {
+    pub instance: Box<TypedExpr>,
+    pub member: LiteralNode,
+}
+
+#[derive(Debug)]
+pub struct MethodCallNode {
+    pub instance: Box<TypedExpr>,
+    pub call: FunCallNode,
+}
+
+pub type InstantiationNode = FunCallNode;
+
+#[derive(Debug)]
+pub struct TypeDeclNode {
+    pub name: LiteralNode,
+    pub params: Vec<(LiteralNode, HulkType)>,
+    pub attributes: Vec<AttributeNode>,
+    pub methods: Vec<FunctionDecl>,
+}
+
+#[derive(Debug)]
+pub struct AttributeNode {
+    pub name: LiteralNode,
+    pub type_annotation: HulkType,
+    pub initializer: TypedExpr,
+}
+
+#[derive(Debug)]
+pub struct LetNode {
+    pub assignments: Vec<((LiteralNode,HulkType), TypedExpr)>,
+    pub body: Box<TypedExpr>,
+}
+
+impl LetNode {
+    pub fn new(assignments: Vec<((LiteralNode,HulkType), TypedExpr)>, body: TypedExpr) -> Self {
+        LetNode {
+            assignments,
+            body: Box::new(body),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct IfNode {
+    pub condition: Box<TypedExpr>,
+    pub if_branch: Box<TypedExpr>,
+    pub elif_branches: Vec<(TypedExpr, TypedExpr)>,
+    pub else_branch: Box<TypedExpr>,
+}
+
+impl IfNode {
+    pub fn new(condition: TypedExpr, if_branch:TypedExpr, elif_branches: Vec<(TypedExpr, TypedExpr)>, else_branch: TypedExpr) -> Self {
+        IfNode {
+            condition: Box::new(condition),
+            if_branch: Box::new(if_branch),
+            elif_branches,
+            else_branch: Box::new(else_branch),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct WhileNode {
+    pub condition: Box<TypedExpr>,
+    pub body: Box<TypedExpr>,
+}
+
+impl WhileNode {
+    pub fn new(condition: TypedExpr, body: TypedExpr) -> Self {
+        WhileNode {
+            condition: Box::new(condition),
+            body: Box::new(body),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ForNode {
+    pub variable: LiteralNode,
+    pub iterator: Box<TypedExpr>,
+    pub body: Box<TypedExpr>,
+}
+
+impl ForNode {
+    pub fn new(variable: LiteralNode, iterator: TypedExpr, body: TypedExpr) -> Self {
+        ForNode {
+            variable,
+            iterator: Box::new(iterator),
+            body: Box::new(body),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FunCallNode {
+    pub name: LiteralNode,
+    pub args: Vec<TypedExpr>,
+}
+
+impl FunCallNode {
+    pub fn new(name: LiteralNode, args: Vec<TypedExpr>) -> Self {
+        FunCallNode { name, args }
+    }
+}
+
+#[derive(Debug)]
+pub struct DestAssignNode {
+    pub identifier: LiteralNode,
+    pub expr: Box<TypedExpr>,
+}
+
+impl DestAssignNode {
+    pub fn new(identifier: LiteralNode, expr: TypedExpr) -> Self {
+        DestAssignNode {
+            identifier,
+            expr: Box::new(expr),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct BinaryOpNode {
+    pub left: Box<TypedExpr>,
+    pub op: BinaryOp,
+    pub right: Box<TypedExpr>,
+}
+
+impl BinaryOpNode {
+    pub fn new(left: TypedExpr, op: BinaryOp, right: TypedExpr) -> Self {
+        BinaryOpNode {
+            left: Box::new(left),
+            op,
+            right: Box::new(right),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct UnaryOpNode {
+    pub op: UnaryOp,
+    pub expr: Box<TypedExpr>,
+}
+
+impl UnaryOpNode {
+    pub fn new(op: UnaryOp, expr: TypedExpr) -> Self {
+        UnaryOpNode {
+            op,
+            expr: Box::new(expr),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct LiteralNode {
+    pub value: Literal,
+}
+
+impl LiteralNode {
+    pub fn new(value: Literal) -> Self {
+        LiteralNode { value }
+    }
+}
+
+#[derive(Debug)]
+pub struct BlockNode {
+    pub expressions: Vec<TypedExpr>,
+}
+
+impl BlockNode {
+    pub fn new(expressions: Vec<TypedExpr>) -> Self {
+        BlockNode { expressions }
+    }
+}
+
+#[derive(Debug)]
+pub enum Literal {
+    Number(f32),
+    Bool(bool),
+    Str(String),
+    Id(String)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BinaryOp {
+    Mul,
+    Div,
+    Add,
+    Sub,
+    Pow,
+    Equal,
+    Dist,
+    Gequa,
+    Lequa,
+    Great,
+    Less,
+    And,
+    Or,
+    Mod,
+}
+#[derive(Debug, Clone, Copy)]
+pub enum UnaryOp {
+    Neg,
+    Not,
+    Plus,
+}
+
+// impl Expr {
+  
+// }
+</file>
+
+<file path="codegen_visitor.rs">
+use crate::codegen::{CodeGenerator, GeneratorResult};
+use crate::expr_visitor::ExprVisitor;
+use crate::nodes::binaryop_node::BinaryOp;
+use crate::nodes::block_node::BlockNode;
+use crate::nodes::destassing_node::DestAssignNode;
+use crate::nodes::for_node::ForNode;
+use crate::nodes::funcall_node::FunCallNode;
+use crate::nodes::if_node::IfNode;
+use crate::nodes::instantiation_node::InstantiationNode;
+use crate::nodes::let_node::LetNode;
+use crate::nodes::expr_node::{Expr, HulkType};
+use crate::nodes::member_access_node::{MemberAccessNode, MethodCallNode};
+use crate::nodes::type_downcast_node::TypeDowncastNode;
+use crate::nodes::type_test_node::TypeTestNode;
+use crate::nodes::unaryop_node::UnaryOp;
+use crate::nodes::while_node::WhileNode;
+use crate::nodes::literal_node::Literal;
+
+impl ExprVisitor<GeneratorResult> for CodeGenerator {
+
+    fn visit_number(&mut self, n: f32) -> GeneratorResult {
+        GeneratorResult::new(n.to_string(), "double".to_string())
+    }
+
+    fn visit_bool(&mut self, b: bool) -> GeneratorResult {
+        let val = if b { "1" } else { "0" };
+        GeneratorResult::new(val.to_string(), "i1".to_string())
+    }
+
+    fn visit_binary_op(
+        &mut self,
+        left: &mut Expr,
+        op: &BinaryOp,
+        right: & mut Expr,
+    ) -> GeneratorResult {
+        let l = left.accept(self);
+        let r = right.accept(self);
+        let res_reg = self.next_temp();
+
+        let (instr, res_type) = match op {
+            BinaryOp::Add  => (format!("{} = fadd double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Sub  => (format!("{} = fsub double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Mul  => (format!("{} = fmul double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Div  => (format!("{} = fdiv double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Mod  => (format!("{} = frem double {}, {}", res_reg, l.register, r.register), "double"),
+            BinaryOp::Pow  => {
+                // LLVM no tiene pow directo; usamos llvm.pow.f64 o una llamada a libm.
+                (format!("{} = call double @llvm.pow.f64(double {}, double {})", res_reg, l.register, r.register), "double")
+            }
+            BinaryOp::Equal => (format!("{} = fcmp oeq double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Dist  => (format!("{} = fcmp une double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Great => (format!("{} = fcmp ogt double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Less  => (format!("{} = fcmp olt double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Gequa => (format!("{} = fcmp oge double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Lequa => (format!("{} = fcmp ole double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::And   => (format!("{} = and i1 {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Or    => (format!("{} = or i1 {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::SingleConc => return self.emit_single_concat(&l, &r),
+            BinaryOp::SpacedConc => return self.emit_spaced_concat(&l, &r),
+        };
+
+        self.emit(instr);
+        GeneratorResult::new(res_reg, res_type.to_string())
+    }
+
+    fn visit_block(&mut self, node: &mut BlockNode) -> GeneratorResult {
+        let mut last_res = GeneratorResult::new("0.0".to_string(), "double".to_string());
+        self.push_scope();
+        for expr in &mut node.expressions {
+            last_res = expr.accept(self);
+        }
+        self.pop_scope();
+        last_res
+    }
+
+    fn visit_while(&mut self, node: &mut WhileNode) -> GeneratorResult {
+        let cond_label  = self.next_label("while_cond");
+        let body_label  = self.next_label("while_body");
+        let end_label   = self.next_label("while_end");
+ 
+        let res_ptr = self.next_temp();
+        self.emit(format!("{} = alloca double", res_ptr));
+        self.emit(format!("store double 0.0, ptr {}", res_ptr));
+ 
+        self.emit(format!("br label %{}", cond_label));
+        self.emit_label(cond_label.clone());
+        let cond = node.condition.accept(self);
+        self.emit(format!("br i1 {}, label %{}, label %{}", cond.register, body_label, end_label));
+ 
+        self.emit_label(body_label);
+        let body_res = node.body.accept(self);
+        self.emit(format!("store double {}, ptr {}", body_res.register, res_ptr));
+        self.emit(format!("br label %{}", cond_label));
+ 
+        self.emit_label(end_label);
+        let final_val = self.next_temp();
+        self.emit(format!("{} = load double, ptr {}", final_val, res_ptr));
+        GeneratorResult::new(final_val, "double".to_string())
+    }
+
+    fn visit_if(&mut self, node: &mut IfNode) -> GeneratorResult {
+        let then_label  = self.next_label("if_then");
+        let else_label  = self.next_label("if_else");
+        let merge_label = self.next_label("if_merge");
+
+        let cond = node.condition.accept(self);
+        self.emit(format!("br i1 {}, label %{}, label %{}", cond.register, then_label, else_label));
+
+        self.emit_label(then_label.clone());
+        let then_res = node.if_branch.accept(self);
+        let actual_then_block = self.last_block_label();
+        self.emit(format!("br label %{}", merge_label));
+
+        self.emit_label(else_label.clone());
+        let else_res = node.else_branch.accept(self);
+        let actual_else_block = self.last_block_label();
+        self.emit(format!("br label %{}", merge_label));
+
+        self.emit_label(merge_label);
+        let res_reg = self.next_temp();
+        self.emit(format!(
+            "{} = phi {} [ {}, %{} ], [ {}, %{} ]",
+            res_reg, then_res.llvm_type,
+            then_res.register, actual_then_block,
+            else_res.register, actual_else_block
+        ));
+        GeneratorResult::new(res_reg, then_res.llvm_type)
+    }
+
+    fn visit_let(&mut self, node: &mut LetNode) -> GeneratorResult {
+        self.push_scope();
+        for ((name_node, hulk_type), expr) in &mut node.assignments {
+            let val = expr.accept(self);
+            if let Literal::Id(name) = &name_node.value {
+                let ptr = self.next_temp();
+                match hulk_type {
+                    HulkType::Class(_) => {
+                        self.emit(format!("{} = alloca ptr", ptr));
+                        self.emit(format!("store ptr {}, ptr {}", val.register, ptr));
+                    }
+                    _ => {
+                        self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
+                        self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, ptr));
+                    }
+                }
+                self.define_variable(name.clone(), ptr, val.llvm_type.clone());
+            }
+        }
+        let res = node.body.accept(self);
+        self.pop_scope();
+        res
+    }
+
+    fn visit_id(&mut self, id: &str) -> GeneratorResult {
+        if let Some((ptr, ty)) = self.resolve_variable(id) {
+            let res_reg = self.next_temp();
+            match ty.as_str() {
+                "double" | "i1" => self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr)),
+                _               => self.emit(format!("{} = load ptr, ptr {}", res_reg, ptr)),
+            }
+            GeneratorResult::new(res_reg, ty)
+        } else {
+            GeneratorResult::new("0.0".to_string(), "double".to_string())
+        }
+    }
+
+    fn visit_self(&mut self) -> GeneratorResult {
+        if let Some((ptr, ty)) = self.resolve_variable("%self") {
+            GeneratorResult::new(ptr, ty)
+        } else {
+            self.emit("; ERROR: 'self' usado fuera de contexto de método".to_string());
+            GeneratorResult::new("null".to_string(), "ptr".to_string())
+        }
+    }
+
+    fn visit_dest_assign(&mut self, node: &mut DestAssignNode) -> GeneratorResult {
+        let val = node.expr.accept(self);
+
+        match &mut node.target.as_mut() {
+            Expr::Literal(lit_node) => {
+                if let Literal::Id(name) = &lit_node.value {
+                    if let Some((ptr, ty)) = self.resolve_variable(name) {
+                        self.emit(format!("store {} {}, ptr {}", ty, val.register, ptr));
+                    } else {
+                        self.emit(format!("; ERROR: variable '{}' no declarada en dest-assign", name));
+                    }
+                }
+                val
+            }
+            Expr::MemberAccess(access) => {
+                let inst_res = access.instance.accept(self);
+                if let Literal::Id(field_name) = &access.member.value {
+                    let field_ptr = self.next_temp();
+                    let index = self.get_field_index(&inst_res.llvm_type, field_name);
+                    self.emit(format!(
+                        "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {} ; campo {}",
+                        field_ptr, inst_res.llvm_type, inst_res.register, index, field_name
+                    ));
+                    self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, field_ptr));
+                }
+                val
+            }
+            Expr::SelfRef => {
+                self.emit("; ERROR semántico: 'self' no es target válido de asignación".to_string());
+                val
+            }
+            _ => {
+                self.emit("; ERROR: target de asignación no válido".to_string());
+                val
+            }
+        }
+    }
+
+    fn visit_fun_call(&mut self, node: &mut FunCallNode) -> GeneratorResult {
+        let mut args = Vec::new();
+        for arg_expr in &mut node.args {
+            args.push(arg_expr.accept(self));
+        }
+
+        if let Literal::Id(name) = &node.name.value {
+            if name == "print" {
+                if let Some(arg) = args.first() {
+                    let res_reg = self.next_temp();
+                    match arg.llvm_type.as_str() {
+                        "double" => {
+                            self.emit(format!(
+                                "{} = call i32 (ptr, ...) @printf(ptr @.fmt_double, double {})",
+                                res_reg, arg.register
+                            ));
+                        }
+                        "i1" => {
+                            let str_ptr = self.next_temp();
+                            self.emit(format!(
+                                "{} = select i1 {}, ptr @.str_true, ptr @.str_false",
+                                str_ptr, arg.register
+                            ));
+                            self.emit(format!(
+                                "{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})",
+                                res_reg, str_ptr
+                            ));
+                        }
+                        _ => {
+                            self.emit(format!(
+                                "{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})",
+                                res_reg, arg.register
+                            ));
+                        }
+                    }
+
+                }
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+
+            let return_type = CodeGenerator::hulk_type_to_llvm(&node.return_type);
+            let res_reg = self.next_temp();
+            let arg_strings: Vec<String> = args.iter()
+                .map(|a| format!("{} {}", a.llvm_type, a.register))
+                .collect();
+            self.emit(format!("{} = call {} @{}({})", res_reg, return_type, name, arg_strings.join(", ")));
+            return GeneratorResult::new(res_reg, return_type);
+        }
+
+        GeneratorResult::new("0.0".to_string(), "double".to_string())
+    }
+
+     fn visit_for(&mut self, node: &mut ForNode) -> GeneratorResult {
+        // El parser construye el iterador como FunCall("range", [start, end]).
+        // No existe una funcion `range` real; extraemos los dos argumentos
+        // directamente del nodo y generamos un loop con contador en IR.
+        let (start_res, end_res) = match &mut node.iterator.as_mut() {
+            Expr::FunCall(call) => {
+                if call.args.len() == 2 {
+                    let s = call.args[0].accept(self);
+                    let e = call.args[1].accept(self);
+                    (s, e)
+                } else {
+                    let s = node.iterator.accept(self);
+                    (s, GeneratorResult::new("0.0".to_string(), "double".to_string()))
+                }
+            }
+            _ => {
+                let s = node.iterator.accept(self);
+                (s, GeneratorResult::new("0.0".to_string(), "double".to_string()))
+            }
+        };
+ 
+        let loop_cond  = self.next_label("for_cond");
+        let loop_body  = self.next_label("for_body");
+        let loop_end   = self.next_label("for_end");
+ 
+        // Resultado acumulado del loop (ultimo valor del cuerpo).
+        let result_ptr = self.next_temp();
+        self.emit(format!("{} = alloca double", result_ptr));
+        self.emit(format!("store double 0.0, ptr {}", result_ptr));
+ 
+        // Contador: inicializado con start.
+        let counter_ptr = self.next_temp();
+        self.emit(format!("{} = alloca double", counter_ptr));
+        self.emit(format!("store double {}, ptr {}", start_res.register, counter_ptr));
+ 
+        // Saltar al bloque de condicion (cierra el bloque entry / previo).
+        self.emit(format!("br label %{}", loop_cond));
+ 
+        // ---- bloque de condicion: counter < end --------------------------
+        self.emit_label(loop_cond.clone());
+        let cur  = self.next_temp();
+        let cond = self.next_temp();
+        self.emit(format!("{} = load double, ptr {}", cur, counter_ptr));
+        self.emit(format!("{} = fcmp olt double {}, {}", cond, cur, end_res.register));
+        self.emit(format!("br i1 {}, label %{}, label %{}", cond, loop_body, loop_end));
+ 
+        // ---- bloque de cuerpo --------------------------------------------
+        self.emit_label(loop_body.clone());
+        self.push_scope();
+ 
+        // Exponer la variable del for con el valor actual del contador.
+        if let Literal::Id(var_name) = &node.variable.value {
+            let var_ptr = self.next_temp();
+            self.emit(format!("{} = alloca double", var_ptr));
+            self.emit(format!("store double {}, ptr {}", cur, var_ptr));
+            self.define_variable(var_name.clone(), var_ptr, "double".to_string());
+        }
+ 
+        let body_res = node.body.accept(self);
+        self.emit(format!("store double {}, ptr {}", body_res.register, result_ptr));
+ 
+        // Incrementar el contador en 1.
+        let cur2     = self.next_temp();
+        let next_val = self.next_temp();
+        self.emit(format!("{} = load double, ptr {}", cur2, counter_ptr));
+        self.emit(format!("{} = fadd double {}, 1.0", next_val, cur2));
+        self.emit(format!("store double {}, ptr {}", next_val, counter_ptr));
+ 
+        self.emit(format!("br label %{}", loop_cond));
+        self.pop_scope();
+ 
+        // ---- bloque de salida --------------------------------------------
+        self.emit_label(loop_end.clone());
+        let final_val = self.next_temp();
+        self.emit(format!("{} = load double, ptr {}", final_val, result_ptr));
+ 
+        GeneratorResult::new(final_val, "double".to_string())
+    }
+
+    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &mut Expr) -> GeneratorResult {
+        let val = expr.accept(self);
+        let res_reg = self.next_temp();
+        let (instr, res_ty) = match op {
+            UnaryOp::Not  => (format!("{} = xor i1 {}, 1", res_reg, val.register), "i1"),
+            UnaryOp::Neg  => (format!("{} = fneg double {}", res_reg, val.register), "double"),
+            UnaryOp::Plus => (format!("{} = fadd double 0.0, {}", res_reg, val.register), "double"),
+        };
+        self.emit(instr);
+        GeneratorResult::new(res_reg, res_ty.to_string())
+    }
+
+    fn visit_string(&mut self, s: &str) -> GeneratorResult {
+        let global_name = format!("@.str.{}", self.temp_counter);
+        self.temp_counter += 1;
+        let len = s.len() + 1;
+        self.global_decls.push(format!(
+            "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
+            global_name, len, s
+        ));
+        GeneratorResult::new(global_name, "ptr".to_string())
+    }
+
+    fn visit_instantiation(
+        &mut self,
+        node: &mut InstantiationNode,
+    ) -> GeneratorResult {
+        let mut args = Vec::new();
+        for arg_expr in &mut node.args {
+            args.push(arg_expr.accept(self));
+        }
+
+        if let Literal::Id(type_name) = &node.name.value {
+            let res_reg = self.next_temp();
+            let arg_strings: Vec<String> = args.iter()
+                .map(|a| format!("{} {}", a.llvm_type, a.register))
+                .collect();
+            self.emit(format!(
+                "{} = call ptr @{}_new({})",
+                res_reg, type_name, arg_strings.join(", ")
+            ));
+            return GeneratorResult::new(res_reg, type_name.to_string());
+        }
+        GeneratorResult::new("null".to_string(), "ptr".to_string())
+    }
+
+    /// Lee el valor de un atributo de una instancia.
+    ///
+    /// El índice del campo incluye +1 por el vptr en posición 0.
+    fn visit_member_access(
+        &mut self,
+        node: &mut MemberAccessNode,
+    ) -> GeneratorResult {
+        let inst_res = node.instance.accept(self);
+
+        if let Literal::Id(field_name) = &node.member.value {
+            // get_field_index ya suma 1 para saltar el vptr.
+            let field_index = self.get_field_index(&inst_res.llvm_type, field_name);
+            let field_ptr   = self.next_temp();
+            let field_val   = self.next_temp();
+            let return_type = self.resolve_variable(&field_name).unwrap().1;
+
+            self.emit(format!(
+                "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {}",
+                field_ptr, inst_res.llvm_type, inst_res.register, field_index
+            ));
+            self.emit(format!("{} = load {} , ptr {}", field_val, return_type, field_ptr));
+            return GeneratorResult::new(field_val, return_type);
+        }
+        GeneratorResult::new("0.0".to_string(), "double".to_string())
+    }
+
+    /// Emite una llamada a un método de instancia usando despacho indirecto
+    /// a través de la VTable.
+    ///
+    /// # Secuencia de instrucciones emitidas
+    ///
+    /// ```text
+    ///   ; 1. Leer el vptr del objeto (campo 0 del struct)
+    ///   %vptr_field = getelementptr inbounds %T, ptr %obj, i32 0, i32 0
+    ///   %vptr       = load ptr, ptr %vptr_field
+    ///
+    ///   ; 2. Leer el function pointer del slot correcto de la VTable
+    ///   %fn_slot    = getelementptr inbounds %VTable_T, ptr %vptr, i32 0, i32 <slot>
+    ///   %fn_ptr     = load ptr, ptr %fn_slot
+    ///
+    ///   ; 3. Llamada indirecta (polimórfica)
+    ///   %result     = call double %fn_ptr(ptr %obj, <args...>)
+    /// ```
+    ///
+    /// # Por qué despacho indirecto y no una llamada directa
+    ///
+    /// Con una llamada directa (`call double @Animal_speak(...)`) el compilador
+    /// fijaría en tiempo de compilación qué función se ejecuta.  Si el objeto
+    /// es en realidad un `Dog` (hijo de `Animal`), se ejecutaría la versión
+    /// equivocada.  El despacho a través del vptr lee la función *real* del
+    /// objeto en tiempo de ejecución, que en el caso de un `Dog` apuntará a
+    /// `@Dog_speak`.  Esto es exactamente lo que permite el polimorfismo.
+    ///
+    /// # Por qué necesitamos el tipo estático (`inst_res.llvm_type`)
+    ///
+    /// Solo usamos el tipo estático para:
+    ///   a) Calcular el índice del slot en la VTable (invariante entre padre
+    ///      e hijo gracias a build_vtable_for_class).
+    ///   b) Emitir el GEP del vptr con el tipo LLVM correcto del struct.
+    ///
+    /// El tipo *dinámico* real se resuelve solo en tiempo de ejecución a
+    /// través del contenido del vptr.
+    fn visit_method_call(
+        &mut self,
+        node: &mut MethodCallNode,
+    ) -> GeneratorResult {
+        // ---- 0.  Evaluar receiver y argumentos ----------------------------
+        let inst_res = node.instance.accept(self);
+
+        let mut arg_results = Vec::new();
+        for arg_expr in &mut node.call.args {
+            arg_results.push(arg_expr.accept(self));
+        }
+
+        if let Literal::Id(method_name) = &node.call.name.value {
+            // ---- 1.  Resolver el slot de la vtable para este método -------
+            //
+            // Usamos el tipo *estático* de la instancia (conocido en compile
+            // time) para encontrar el índice del slot.  Gracias a que
+            // build_vtable_for_class preserva el orden del padre, este índice
+            // es válido también cuando el tipo dinámico es un subtipo.
+            let type_name_raw = inst_res.llvm_type.trim_start_matches('%').to_string();
+
+            let slot_index = self
+                .get_vtable_slot_index(&type_name_raw, method_name)
+                .unwrap_or_else(|| {
+                    // Fallback: si no encontramos el slot (error semántico ya reportado),
+                    // usamos 0 para generar IR sintácticamente válido.
+                    0
+                });
+
+            // ---- 2.  Leer vptr del objeto (campo 0) -----------------------
+            let vptr_field = self.next_temp();
+            let vptr       = self.next_temp();
+
+            self.emit(format!(
+                "; Despacho virtual: {}.{}()",
+                type_name_raw, method_name
+            ));
+            self.emit(format!(
+                "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 0  ; leer vptr",
+                vptr_field, type_name_raw, inst_res.register
+            ));
+            self.emit(format!(
+                "{} = load ptr, ptr {}",
+                vptr, vptr_field
+            ));
+
+            // ---- 3.  Leer function pointer del slot de la VTable ----------
+            let fn_slot = self.next_temp();
+            let fn_ptr  = self.next_temp();
+
+            self.emit(format!(
+                "{} = getelementptr inbounds %VTable_{}, ptr {}, i32 0, i32 {}  ; slot {}",
+                fn_slot, type_name_raw, vptr, slot_index, method_name
+            ));
+            self.emit(format!(
+                "{} = load ptr, ptr {}",
+                fn_ptr, fn_slot
+            ));
+
+            // ---- 4.  Llamada indirecta ------------------------------------
+            let res_reg = self.next_temp();
+            let return_type = self.get_vtable_slot(&type_name_raw, slot_index)
+                .map(|s| s.return_type.clone())
+                .unwrap_or_else(|| CodeGenerator::hulk_type_to_llvm(&node.return_type));
+
+            let mut all_args = vec![format!("ptr {}", inst_res.register)];
+            all_args.extend(arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register)));
+
+            self.emit(format!(
+                "{} = call {} {}({})",
+                res_reg, return_type, fn_ptr, all_args.join(", ")
+            ));
+
+            return GeneratorResult::new(res_reg, return_type);
+        }
+
+        GeneratorResult::new("0.0".to_string(), "double".to_string())
+    }
+    
+    fn visit_base_call(&mut self, args: &mut [ Expr]) -> GeneratorResult {
+        // Evaluar argumentos antes de cualquier emit para no intercalar instrucciones.
+        let mut arg_results = Vec::new();
+        for arg in args {
+            arg_results.push(arg.accept(self));
+        }
+
+        // Recuperar contexto: ¿en qué clase y en qué método estamos?
+        let type_name = match self.current_type_context.clone() {
+            Some(t) => t,
+            None => {
+                self.emit("; ERROR: base() usado fuera de contexto de tipo".to_string());
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+        };
+        let method_name = match self.current_method_context.clone() {
+            Some(m) => m,
+            None => {
+                //self.emit("; ERROR: base() usado fuera de un método".to_string());
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+        };
+ 
+        // Buscar el ancestro más cercano con implementación propia.
+        let parent_fn = match self.resolve_parent_method(&type_name, &method_name) {
+            Some(f) => f,
+            None => {
+                 
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+        };
+ 
+        // self siempre es el primer argumento.
+        let self_reg = match self.resolve_variable("%self") {
+            Some((ptr, _)) => ptr,
+            None => "%self".to_string(),
+        };
+        
+        let mut all_args = vec![format!("ptr {}", self_reg)];
+        all_args.extend(
+            arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register))
+        );
+        let slot_index = self
+                .get_vtable_slot_index(&type_name, &method_name)
+                .unwrap_or_else(|| {
+                    // Fallback: si no encontramos el slot (error semántico ya reportado),
+                    // usamos 0 para generar IR sintácticamente válido.
+                    0
+                });
+
+         let return_type = self.get_vtable_slot(&method_name,slot_index).map(|s| s.return_type.clone()).unwrap_or_else(|| "ptr".to_string());
+                
+ 
+        let res_reg = self.next_temp();
+        
+        self.emit(format!(
+            "{} = call {} {}({})",
+            res_reg, return_type, parent_fn, all_args.join(", ")
+        ));
+ 
+        GeneratorResult::new(res_reg, return_type)
+    }
+    
+    fn visit_type_downcast(&mut self, node: &mut TypeDowncastNode) -> GeneratorResult {
+        let expr_res    = node.expr.accept(self);
+        let target_name = node.target_type.value.as_id();
+ 
+        // ---- Load vptr ---------------------------------------------------
+        let vptr_field = self.next_temp();
+        let vptr       = self.next_temp();
+ 
+        self.emit(format!("; downcast: {} as {}", expr_res.register, target_name));
+        self.emit(format!(
+            "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 0",
+            vptr_field, expr_res.llvm_type, expr_res.register
+        ));
+        self.emit(format!("{} = load ptr, ptr {}", vptr, vptr_field));
+ 
+        // ---- Conformance check (same logic as `is`) ----------------------
+        let subtypes = self.collect_subtypes(&target_name);
+ 
+        let is_ok_reg = if subtypes.is_empty() {
+            let r = self.next_temp();
+            self.emit(format!("{} = add i1 0, 0  ; unknown target, always false", r));
+            r
+        } else {
+            let mut cmp_regs: Vec<String> = Vec::new();
+            for subtype in &subtypes {
+                let cmp_reg = self.next_temp();
+                self.emit(format!(
+                    "{} = icmp eq ptr {}, @vtable_{}",
+                    cmp_reg, vptr, subtype
+                ));
+                cmp_regs.push(cmp_reg);
+            }
+            cmp_regs[1..].iter().fold(cmp_regs[0].clone(), |acc, cmp| {
+                let or_reg = self.next_temp();
+                self.emit(format!("{} = or i1 {}, {}", or_reg, acc, cmp));
+                or_reg
+            })
+        };
+ 
+        // ---- Branch: ok → continue; fail → runtime error ----------------
+        let ok_label   = self.next_label("cast_ok");
+        let fail_label = self.next_label("cast_fail");
+ 
+        self.emit(format!(
+            "br i1 {}, label %{}, label %{}",
+            is_ok_reg, ok_label, fail_label
+        ));
+ 
+        // cast_fail block
+        self.emit_label(fail_label);
+        self.emit("call void @hulk_cast_error()".to_string());
+        self.emit("unreachable".to_string());
+ 
+        // cast_ok block — pointer is valid, return it with target static type
+        self.emit_label(ok_label);
+ 
+        GeneratorResult::new(expr_res.register, target_name)
+    }
+    
+    fn visit_type_test(&mut self, node: &mut TypeTestNode) -> GeneratorResult {
+        // Evaluate the expression being tested.
+        let expr_res = node.expr.accept(self);
+        let target_name = node.target_type.value.as_id();
+ 
+        // ---- Load vptr from the object ------------------------------------
+        let vptr_field = self.next_temp();
+        let vptr       = self.next_temp();
+ 
+        self.emit(format!("; type test: {} is {}", expr_res.register, target_name));
+        self.emit(format!(
+            "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 0",
+            vptr_field, expr_res.llvm_type, expr_res.register
+        ));
+        self.emit(format!("{} = load ptr, ptr {}", vptr, vptr_field));
+ 
+        // ---- Collect all subtypes of target (including itself) ------------
+        let subtypes = self.collect_subtypes(&target_name);
+ 
+        if subtypes.is_empty() {
+            // Target type not in class_meta: always false at runtime.
+            let false_reg = self.next_temp();
+            self.emit(format!("{} = add i1 0, 0  ; unknown target, always false", false_reg));
+            return GeneratorResult::new(false_reg, "i1".to_string());
+        }
+ 
+        // ---- Compare vptr against each subtype's vtable ------------------
+        let mut cmp_regs: Vec<String> = Vec::new();
+        for subtype in &subtypes {
+            let cmp_reg = self.next_temp();
+            self.emit(format!(
+                "{} = icmp eq ptr {}, @vtable_{}",
+                cmp_reg, vptr, subtype
+            ));
+            cmp_regs.push(cmp_reg);
+        }
+ 
+        // ---- OR all comparisons together ---------------------------------
+        let result_reg = cmp_regs[1..].iter().fold(cmp_regs[0].clone(), |acc, cmp| {
+            let or_reg = self.next_temp();
+            self.emit(format!("{} = or i1 {}, {}", or_reg, acc, cmp));
+            or_reg
+        });
+ 
+        GeneratorResult::new(result_reg, "i1".to_string())
+    }
+}
+</file>
+
+<file path="codegen.rs">
+use std::fs;
+use std::collections::HashMap;
+use crate::nodes::function_decl_node::FunctionDecl;
+use crate::nodes::literal_node::Literal;
+use crate::nodes::program_node::{Program, Statement};
+use crate::nodes::type_decl_node::{AttributeNode, TypeDeclNode};
+use crate::nodes::expr_node::{HulkType, Expr};
+
+// ---------------------------------------------------------------------------
+// GeneratorResult
+// ---------------------------------------------------------------------------
+
+/// Resultado de compilar una expresión: registro LLVM + tipo LLVM.
+#[derive(Debug, Clone)]
+pub struct GeneratorResult {
+    pub register: String,
+    pub llvm_type: String,
+}
+
+impl GeneratorResult {
+    pub fn new(register: String, llvm_type: String) -> Self {
+        Self { register, llvm_type }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ClassMeta  —  información de una clase necesaria en codegen
+// ---------------------------------------------------------------------------
+
+/// Descripción de un slot de VTable: nombre del método + firma LLVM completa.
+///
+/// Por qué guardamos la firma aquí:
+///   La función de despacho indirecto (`call` a través de un function pointer)
+///   necesita conocer el tipo exacto del puntero de función para emitir
+///   `getelementptr` e instrucciones de `load` / `call` correctas en LLVM IR.
+///   Guardarla en ClassMeta nos evita reconstruirla en cada call-site.
+#[derive(Debug, Clone)]
+pub struct VTableSlot {
+    /// Nombre del método tal como se declara en HULK (e.g. "speak").
+    pub method_name: String,
+    /// Nombre LLVM de la función que implementa el slot para *esta* clase
+    /// (puede ser la propia clase o una heredada sin override).
+    /// Forma: `@ClassName_methodName`
+    pub impl_fn: String,
+    /// Tipo LLVM del function pointer: `ptr` (opaque pointer, LLVM 15+).
+    /// Mantenemos este campo para extensión futura con typed function pointers.
+    pub fn_ptr_llvm_type: String,
+    /// Tipo de retorno del método en LLVM (i1, double, ptr, etc).
+    pub return_type: String,
+}
+
+/// Información de una clase registrada en el CodeGenerator.
+#[derive(Debug, Clone)]
+pub struct ClassMeta {
+    /// Nombre de la clase padre, si la hay.
+    pub parent: Option<String>,
+    /// Parámetros del constructor: lista de (nombre, tipo_llvm).
+    /// Necesario para que los hijos que heredan parámetros implícitamente
+    /// puedan reconstruir la firma correcta de @T_new y @T_init_fields.
+    pub ctor_params: Vec<(String, String)>,
+    /// Campos propios del struct LLVM (excluyendo el puntero a vtable).
+    /// Índice 0 en el struct real = puntero a vtable (siempre inyectado).
+    /// Índice k en own_fields = índice k+1 en el struct LLVM.
+    ///
+    /// Por qué excluir la vtable aquí:
+    ///   Separar "campos de datos" de "campo de metadatos" simplifica el
+    ///   cálculo de GEP en member_access y destassign; ambos usan
+    ///   `get_field_index`, que ya suma 1 internamente para saltar la vtable.
+    pub own_fields: Vec<(String, String)>, // (nombre, tipo_llvm)
+    /// Tabla virtual de esta clase: lista ordenada de slots.
+    /// El índice en este vec corresponde al índice en la VTable global.
+    pub vtable: Vec<VTableSlot>,
+}
+
+// ---------------------------------------------------------------------------
+// CodeGenerator
+// ---------------------------------------------------------------------------
+
+pub struct CodeGenerator {
+    /// Instrucciones LLVM IR acumuladas.
+    pub code: Vec<String>,
+    pub temp_counter: usize,
+    pub label_counter: usize,
+    /// Tabla de símbolos por scope: nombre -> (registro/ptr LLVM, tipo LLVM).
+    pub scopes: Vec<HashMap<String, (String, String)>>,
+    /// Layout de structs (compatibilidad con código existente).
+    /// Clave: nombre de tipo.  Valor: lista de campos de *datos* (sin vtable ptr).
+    pub struct_layout: HashMap<String, Vec<(String, String)>>,
+    /// Metadatos completos por clase, incluyendo jerarquía y vtable.
+    pub class_meta: HashMap<String, ClassMeta>,
+    /// Tipo HULK que se está compilando actualmente.
+    pub current_type_context: Option<String>,
+    pub global_decls: Vec<String>,
+    pub current_method_context: Option<String>,
+}
+
+impl CodeGenerator {
+    pub fn new() -> Self {
+        Self {
+            code: Vec::new(),
+            temp_counter: 0,
+            label_counter: 0,
+            scopes: vec![HashMap::new()],
+            struct_layout: HashMap::new(),
+            class_meta: HashMap::new(),
+            current_type_context: None,
+            global_decls: Vec::new(),
+            current_method_context : None,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Layout helpers
+    // -----------------------------------------------------------------------
+
+
+    /// Busca el ancestro más cercano de `type_name` que tenga una implementación
+    /// propia del método `method_name`, y retorna el nombre LLVM de esa función.
+    ///
+    /// "Implementación propia" significa que la función se llama `@AncestorName_method`,
+    /// es decir, que el impl_fn del slot en la vtable del ancestro apunta a él mismo
+    /// y no a una clase más arriba.  Esto permite que `base()` salte exactamente un
+    /// nivel en la jerarquía aunque haya múltiples niveles de herencia.
+    ///
+    /// Ejemplo con  A -> B -> C  y  B overridea speak():
+    ///   resolve_parent_method("C", "speak") → "@B_speak"   (B es el ancestro más cercano)
+    ///   resolve_parent_method("B", "speak") → "@A_speak"
+    ///
+    /// Por qué llamada directa y no indirecta vía vtable:
+    ///   base() debe llamar SIEMPRE a la implementación del padre estático,
+    ///   independientemente del tipo dinámico del objeto.  Si usáramos el vptr
+    ///   de self (despacho indirecto), obtendríamos el método de la clase más
+    ///   derivada, que puede ser el mismo método que ya estamos ejecutando,
+    ///   causando recursión infinita.  La llamada directa a @Parent_method
+    ///   es exactamente cómo C++ implementa `Base::method()`.
+    pub fn resolve_parent_method(&self, type_name: &str, method_name: &str) -> Option<String> {
+        let meta = self.class_meta.get(type_name)?;
+        let parent_name = meta.parent.as_deref()?;
+        self.resolve_own_impl(parent_name, method_name)
+    }
+ 
+    /// Recorre la cadena de herencia desde `type_name` hacia arriba buscando
+    /// el primer tipo que tenga `method_name` como implementación propia
+    /// (es decir, `@TypeName_method_name`).
+    fn resolve_own_impl(&self, type_name: &str, method_name: &str) -> Option<String> {
+        let expected_impl = format!("@{}_{}", type_name, method_name);
+        if let Some(meta) = self.class_meta.get(type_name) {
+            // ¿Tiene este tipo su propia implementación del método?
+            let has_own = meta.vtable.iter().any(|s| {
+                s.method_name == method_name && s.impl_fn == expected_impl
+            });
+            if has_own {
+                return Some(expected_impl);
+            }
+            // No la tiene; subir al padre.
+            if let Some(ref parent) = meta.parent {
+                return self.resolve_own_impl(parent, method_name);
+            }
+        }
+        None
+    }
+
+
+    pub fn register_struct_layout(&mut self, type_name: String, fields: Vec<(String, String)>) {
+        self.struct_layout.insert(type_name, fields);
+    }
+   
+    /// Retorna el índice LLVM (base-0) del campo `field_name` dentro del
+    /// struct `llvm_type`, contando el puntero a vtable como índice 0.
+    ///
+    /// Decisión de diseño — por qué índice 0 para la vtable:
+    ///   C++ y la mayoría de implementaciones OOP colocan el vptr al inicio
+    ///   del objeto.  Esto garantiza que un puntero a hijo pueda ser
+    ///   reinterpretado como puntero a padre sin ajuste de dirección
+    ///   (zero-cost cast).  Al agregar siempre el vptr en posición 0,
+    ///   cualquier código que reciba un `ptr` opaco puede leer la vtable
+    ///   con un GEP (0, 0) independientemente del tipo dinámico real.
+    pub fn get_field_index(&self, llvm_type: &str, field_name: &str) -> usize {
+        let key = llvm_type.trim_start_matches('%');
+        // Buscamos primero en class_meta (campos de datos reales).
+        if let Some(meta) = self.class_meta.get(key) {
+            // Construimos la lista completa de campos de datos incluyendo
+            // los heredados del padre, en orden padre-primero.
+            let all_fields = self.collect_all_fields(key);
+            if let Some(pos) = all_fields.iter().position(|(n, _)| n == field_name) {
+                // +1 porque el índice 0 del struct LLVM es el vptr.
+                return pos + 1;
+            }
+        }
+        // Fallback al struct_layout (compatibilidad).
+        if let Some(fields) = self.struct_layout.get(key) {
+            if let Some(pos) = fields.iter().position(|(n, _)| n == field_name) {
+                return pos + 1; // +1 por vptr
+            }
+        }
+        1 // fallback seguro: campo de datos en índice 1
+    }
+
+    /// Construye recursivamente la lista completa de campos de datos de una
+    /// clase, colocando los campos del padre antes que los del hijo.
+    ///
+    /// Fundamento (herencia por prefijo / "base-first layout"):
+    ///   Si `Dog` hereda de `Animal` y el layout de `Dog` es:
+    ///     { vptr, animal_field_0, ..., animal_field_N, dog_field_0, ... }
+    ///   entonces un `ptr` a `Dog` es un `ptr` válido a `Animal` porque los
+    ///   primeros campos coinciden.  Esto es exactamente el modelo de C++
+    ///   (single inheritance) y permite upcasting sin copia.
+    pub fn collect_all_fields(&self, type_name: &str) -> Vec<(String, String)> {
+        let mut result = Vec::new();
+        if let Some(meta) = self.class_meta.get(type_name) {
+            if let Some(ref parent_name) = meta.parent.clone() {
+                result.extend(self.collect_all_fields(parent_name));
+            }
+            result.extend(meta.own_fields.clone());
+        }
+        result
+    }
+
+    /// Resuelve el índice de un slot de VTable para el método `method_name`
+    /// en la clase `type_name`.  Retorna None si el método no existe.
+    pub fn get_vtable_slot_index(&self, type_name: &str, method_name: &str) -> Option<usize> {
+        let meta = self.class_meta.get(type_name)?;
+        meta.vtable.iter().position(|s| s.method_name == method_name)
+    }
+
+    /// Retorna la implementación concreta (nombre de función LLVM) para un
+    /// slot de vtable dado su índice en la clase `type_name`.
+    pub fn get_vtable_slot(&self, type_name: &str, slot: usize) -> Option<&VTableSlot> {
+        self.class_meta.get(type_name)?.vtable.get(slot)
+    }
+
+    // -----------------------------------------------------------------------
+    // Scope helpers
+    // -----------------------------------------------------------------------
+
+    pub fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    pub fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    pub fn define_variable(&mut self, name: String, register: String, ty: String) {
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.insert(name, (register, ty));
+        }
+    }
+
+    pub fn resolve_variable(&self, name: &str) -> Option<(String, String)> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(v) = scope.get(name) {
+                return Some(v.clone());
+            }
+        }
+        None
+    }
+
+    // -----------------------------------------------------------------------
+    // IR emission helpers
+    // -----------------------------------------------------------------------
+
+    pub fn next_temp(&mut self) -> String {
+        let t = format!("%t{}", self.temp_counter);
+        self.temp_counter += 1;
+        t
+    }
+
+    pub fn next_label(&mut self, prefix: &str) -> String {
+        let l = format!("{}_{}", prefix, self.label_counter);
+        self.label_counter += 1;
+        l
+    }
+
+    pub fn emit(&mut self, instr: String) {
+        self.code.push(format!("  {}", instr));
+    }
+
+    pub fn emit_label(&mut self, label: String) {
+        self.code.push(format!("{}:", label));
+    }
+
+    pub fn emit_raw(&mut self, line: String) {
+        self.code.push(line);
+    }
+
+    pub fn last_block_label(&self) -> String {
+        for line in self.code.iter().rev() {
+            let trimmed = line.trim_end();
+            if trimmed.ends_with(':') && !trimmed.starts_with(' ') {
+                return trimmed[..trimmed.len() - 1].to_string();
+            }
+        }
+        "entry".to_string()
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers de tipo HULK -> LLVM
+    // -----------------------------------------------------------------------
+
+    pub fn hulk_type_to_llvm(ty: &HulkType) -> String {
+        match ty {
+            HulkType::Number  => "double".to_string(),
+            HulkType::Bool    => "i1".to_string(),
+            HulkType::String  => "ptr".to_string(),
+            HulkType::Class(_) => "ptr".to_string(),
+            HulkType::Unknown  => "ptr".to_string(), //Medida de seguridad 
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // String concatenation (sin cambios)
+    // -----------------------------------------------------------------------
+
+    pub fn emit_single_concat(&mut self, l: &GeneratorResult, r: &GeneratorResult) -> GeneratorResult {
+        let len_l  = self.next_temp();
+        let len_r  = self.next_temp();
+        let tot0   = self.next_temp();
+        let tot1   = self.next_temp();
+        let buf    = self.next_temp();
+        self.emit(format!("{} = call i64 @strlen(ptr {})", len_l, l.register));
+        self.emit(format!("{} = call i64 @strlen(ptr {})", len_r, r.register));
+        self.emit(format!("{} = add i64 {}, {}", tot0, len_l, len_r));
+        self.emit(format!("{} = add i64 {}, 1", tot1, tot0));
+        self.emit(format!("{} = call ptr @malloc(i64 {})", buf, tot1));
+        self.emit(format!("call ptr @strcpy(ptr {}, ptr {})", buf, l.register));
+        self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, r.register));
+        GeneratorResult::new(buf, "ptr".to_string())
+    }
+
+    pub fn emit_spaced_concat(&mut self, l: &GeneratorResult, r: &GeneratorResult) -> GeneratorResult {
+        let space_global = "@.str.space".to_string();
+        if !self.global_decls.iter().any(|d| d.starts_with(&space_global)) {
+            self.global_decls.push(
+                "@.str.space = private unnamed_addr constant [2 x i8] c\" \\00\"".to_string()
+            );
+        }
+        let len_l  = self.next_temp();
+        let len_r  = self.next_temp();
+        let tot0   = self.next_temp();
+        let tot1   = self.next_temp();
+        let tot2   = self.next_temp();
+        let buf    = self.next_temp();
+        self.emit(format!("{} = call i64 @strlen(ptr {})", len_l, l.register));
+        self.emit(format!("{} = call i64 @strlen(ptr {})", len_r, r.register));
+        self.emit(format!("{} = add i64 {}, {}", tot0, len_l, len_r));
+        self.emit(format!("{} = add i64 {}, 1", tot1, tot0));
+        self.emit(format!("{} = add i64 {}, 1", tot2, tot1));
+        self.emit(format!("{} = call ptr @malloc(i64 {})", buf, tot2));
+        self.emit(format!("call ptr @strcpy(ptr {}, ptr {})", buf, l.register));
+        self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, space_global));
+        self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, r.register));
+        GeneratorResult::new(buf, "ptr".to_string())
+    }
+
+    pub fn collect_subtypes(&self, ancestor: &str) -> Vec<String> {
+        let mut result = Vec::new();
+        for name in self.class_meta.keys() {
+            if self.is_subtype_in_meta(name, ancestor) {
+                result.push(name.clone());
+            }
+        }
+        // Sort for deterministic IR output (easier to test/diff).
+        result.sort();
+        result
+    }
+ 
+    // Walk class_meta to test `child` is-a `ancestor`.
+    fn is_subtype_in_meta(&self, child: &str, ancestor: &str) -> bool {
+        if child == ancestor { return true; }
+        if let Some(meta) = self.class_meta.get(child) {
+            if let Some(ref parent) = meta.parent {
+                return self.is_subtype_in_meta(parent, ancestor);
+            }
+        }
+        false
+    }
+}
+
+// ---------------------------------------------------------------------------
+// build_vtable_for_class
+//
+// Construye la VTable de `class_name` respetando el orden de slots del padre
+// y sobreescribiendo (override) los slots que el hijo redefine.
+//
+// Fundamento — por qué mantener el orden del padre:
+//   El contrato del polimorfismo en tiempo de ejecución exige que el índice
+//   de un método heredado sea *el mismo* en la vtable del hijo que en la del
+//   padre.  Si `Animal` tiene speak() en slot 0, cualquier código que llame
+//   a speak() a través de un puntero a Animal usará el offset 0.  Cuando
+//   ese puntero apunta a un Dog, el slot 0 debe contener Dog_speak (el
+//   override).  Violarlo causaría llamadas a funciones incorrectas en
+//   tiempo de ejecución sin ningún error en tiempo de compilación.
+// ---------------------------------------------------------------------------
+fn build_vtable_for_class(
+    class_name: &str,
+    parent_meta: Option<&ClassMeta>,
+    own_methods: &[FunctionDecl],
+) -> Vec<VTableSlot> {
+    // Comenzamos con una copia de la vtable del padre (si existe).
+    // Esto garantiza que los índices heredados no cambian.
+    let mut vtable: Vec<VTableSlot> = parent_meta
+        .map(|m| m.vtable.clone())
+        .unwrap_or_default();
+
+    for method in own_methods {
+        let method_name = method.name.value.as_id();
+        let impl_fn = format!("@{}_{}", class_name, method_name);
+
+        // Buscamos si el padre ya tiene un slot para este método (override).
+        if let Some(slot) = vtable.iter_mut().find(|s| s.method_name == method_name) {
+            // Override: actualizamos la implementación conservando el índice.
+            slot.impl_fn = impl_fn;
+            slot.return_type = CodeGenerator::hulk_type_to_llvm(&method.return_type);
+        } else {
+            // Método nuevo: agregamos un slot al final.
+            vtable.push(VTableSlot {
+                method_name: method_name.clone(),
+                impl_fn,
+                fn_ptr_llvm_type: "ptr".to_string(),
+                return_type: CodeGenerator::hulk_type_to_llvm(&method.return_type),
+            });
+        }
+    }
+    vtable
+}
+
+// ---------------------------------------------------------------------------
+// compile_vtable_global
+//
+// Emite la constante global de la VTable para `class_name`.
+//
+// Forma en LLVM IR:
+//   %VTable_Dog = type { ptr, ptr, ... }           ; tipo de la tabla
+//   @vtable_Dog = global %VTable_Dog { ptr @Dog_speak, ptr @Dog_eat, ... }
+//
+// Fundamento — tabla global (no por instancia):
+//   Todos los objetos de una misma clase comparten exactamente la misma
+//   tabla de métodos.  Tener *una* copia global en lugar de copiar la
+//   tabla en cada instancia ahorra memoria proporcional al número de
+//   objetos.  Solo el *puntero* a esa tabla única se almacena en cada
+//   instancia (campo vptr, índice 0 del struct).
+// ---------------------------------------------------------------------------
+fn compile_vtable_global(generator: &mut CodeGenerator, class_name: &str) {
+    let vtable = match generator.class_meta.get(class_name) {
+        Some(m) => m.vtable.clone(),
+        None => return,
+    };
+
+    if vtable.is_empty() {
+        // Si la clase no tiene métodos, emitimos un tipo vacío con un i8 de relleno
+        // (LLVM no permite tipos struct vacíos).
+        generator.emit_raw(format!("%VTable_{} = type {{ i8 }}", class_name));
+        generator.emit_raw(format!(
+            "@vtable_{} = global %VTable_{} {{ i8 0 }}", class_name, class_name
+        ));
+        generator.emit_raw("".to_string());
+        return;
+    }
+
+    // Tipo de la VTable: N punteros a función (todos `ptr` en opaque-pointer mode).
+    let slot_types: Vec<String> = vtable.iter().map(|_| "ptr".to_string()).collect();
+    generator.emit_raw(format!(
+        "%VTable_{} = type {{ {} }}",
+        class_name,
+        slot_types.join(", ")
+    ));
+
+    // Valor concreto: inicializar cada slot con la función que lo implementa.
+    let slot_inits: Vec<String> = vtable
+        .iter()
+        .map(|s| format!("ptr {}", s.impl_fn))
+        .collect();
+    generator.emit_raw(format!(
+        "@vtable_{} = global %VTable_{} {{ {} }}",
+        class_name,
+        class_name,
+        slot_inits.join(", ")
+    ));
+    generator.emit_raw("".to_string());
+}
+
+// ---------------------------------------------------------------------------
+// compile_type_decl  (reemplaza la versión anterior)
+//
+// Para cada tipo T genera:
+//
+//   1. Recopilar metadatos (ClassMeta) y construir vtable lógica.
+//   2. %VTable_T = type { ptr, ... }   + @vtable_T = global %VTable_T { ... }
+//   3. %T = type { ptr, <campos_padre>, <campos_propios> }
+//   4. @T_new(params) -> ptr          (constructor; vptr se inicializa aquí)
+//   5. @T_m(ptr %self, ...) -> ret    (métodos)
+// ---------------------------------------------------------------------------
+fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
+    let type_name = decl.name.value.as_id();
+ 
+    // ------------------------------------------------------------------
+    // 1.  Recopilar metadatos de herencia y construir ClassMeta
+    // ------------------------------------------------------------------
+    let parent_name: Option<String> = decl.inheritance.as_ref()
+        .map(|inh| inh.parent_name.value.as_id());
+ 
+    // Obtenemos una copia de la ClassMeta del padre (si existe) para usarla
+    // en build_vtable_for_class *antes* de insertar la meta del hijo en el
+    // HashMap (no podemos tener referencias mutables e inmutables al mismo tiempo).
+    let parent_meta_clone: Option<ClassMeta> = parent_name.as_deref()
+        .and_then(|pn| generator.class_meta.get(pn))
+        .cloned();
+ 
+    // Campos propios (sólo los declarados en esta clase, no los heredados).
+    let own_fields: Vec<(String, String)> = decl.attributes.iter().map(|attr| {
+        let field_name = attr.name.value.as_id();
+        let llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
+        (field_name, llvm_ty)
+    }).collect();
+ 
+    // Construimos la vtable lógica (orden: heredados primero, nuevos al final).
+    let vtable = build_vtable_for_class(
+        &type_name,
+        parent_meta_clone.as_ref(),
+        &decl.methods,
+    );
+ 
+    // Registrar ClassMeta del hijo.
+    // Calculamos los params efectivos: los propios del tipo o, si no tiene,
+    // los heredados del padre (herencia implícita de parámetros).
+    let effective_ctor_params: Vec<(String, String)> = if !decl.params.is_empty() {
+        decl.params.iter().map(|(p_name, p_type)| {
+            (p_name.value.as_id(), CodeGenerator::hulk_type_to_llvm(p_type))
+        }).collect()
+    } else {
+        // El hijo no declara parámetros: hereda los del padre implícitamente.
+        parent_name.as_deref()
+            .and_then(|pn| generator.class_meta.get(pn))
+            .map(|pm| pm.ctor_params.clone())
+            .unwrap_or_default()
+    };
+
+    let meta = ClassMeta {
+        parent: parent_name.clone(),
+        ctor_params: effective_ctor_params.clone(),
+        own_fields: own_fields.clone(),
+        vtable: vtable.clone(),
+    };
+    generator.class_meta.insert(type_name.clone(), meta);
+ 
+    // Compatibilidad con código existente que usa struct_layout.
+    // Guardamos TODOS los campos de datos (padre + hijo) para que
+    // get_field_index funcione correctamente incluso si es llamado
+    // con la API antigua.
+    let all_fields = generator.collect_all_fields(&type_name);
+    generator.register_struct_layout(type_name.clone(), all_fields.clone());
+ 
+    // ------------------------------------------------------------------
+    // 2.  Emitir VTable global
+    // ------------------------------------------------------------------
+    compile_vtable_global(generator, &type_name);
+ 
+    // ------------------------------------------------------------------
+    // 3.  Emitir definición del struct LLVM
+    //
+    //   %T = type { ptr, <campo_padre_0_ty>, ..., <campo_hijo_0_ty>, ... }
+    //              ^^^
+    //              vptr en índice 0 — siempre presente aunque no haya métodos
+    //
+    // Fundamento — vptr como primer campo en TODAS las estructuras:
+    //   Garantiza que el patrón de acceso a la vtable sea uniforme:
+    //     %vptr = getelementptr inbounds %T, ptr %obj, i32 0, i32 0
+    //   El compilador puede emitir este GEP sin conocer el tipo dinámico
+    //   del objeto, lo que habilita el despacho polimórfico.
+    // ------------------------------------------------------------------
+    let mut field_types: Vec<String> = vec!["ptr".to_string()]; // vptr en posición 0
+    for (_, ty) in &all_fields {
+        field_types.push(ty.clone());
+    }
+ 
+    generator.emit_raw(format!(
+        "%{} = type {{ {} }}",
+        type_name,
+        field_types.join(", ")
+    ));
+    generator.emit_raw("".to_string());
+ 
+    // ------------------------------------------------------------------
+    // 4.  Emitir constructor @T_new
+    // ------------------------------------------------------------------
+ 
+    // Parámetros del constructor = parámetros efectivos del tipo.
+    // Si el tipo no declara parámetros propios pero hereda de un padre con
+    // parámetros, usamos los parámetros del padre (herencia implícita).
+    // `effective_ctor_params` ya fue calculado arriba al construir ClassMeta.
+    let ctor_params: Vec<String> = effective_ctor_params.iter().map(|(p_name, llvm_ty)| {
+        format!("{} %param_{}", llvm_ty, p_name)
+    }).collect();
+ 
+    generator.emit_raw(format!(
+        "define ptr @{}_new({}) {{",
+        type_name, ctor_params.join(", ")
+    ));
+    generator.emit_raw("entry:".to_string());
+ 
+    // Calcular tamaño con el "GEP null trick" clásico de LLVM.
+    let size_ptr = generator.next_temp();
+    let size_val = generator.next_temp();
+    generator.emit(format!(
+        "{} = getelementptr %{}, ptr null, i32 1",
+        size_ptr, type_name
+    ));
+    generator.emit(format!("{} = ptrtoint ptr {} to i64", size_val, size_ptr));
+ 
+    let self_ptr = generator.next_temp();
+    generator.emit(format!("{} = call ptr @malloc(i64 {})", self_ptr, size_val));
+ 
+    // ---- Inicializar vptr (índice 0 del struct) -------------------------
+    //
+    // Fundamento:
+    //   El constructor es el único lugar correcto para escribir el vptr
+    //   porque:
+    //     a) Es el momento en que el objeto nace con su tipo dinámico definitivo.
+    //     b) Los métodos y demás código nunca deben escribir el vptr (invariante
+    //        de clase: el tipo dinámico no cambia después de construcción).
+    //   Guardar @vtable_T (dirección de la tabla global) es suficiente;
+    //   la tabla en sí es inmutable en tiempo de ejecución.
+    let vptr_field = generator.next_temp();
+    generator.emit(format!(
+        "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 0",
+        vptr_field, type_name, self_ptr
+    ));
+    generator.emit(format!(
+        "store ptr @vtable_{}, ptr {}",
+        type_name, vptr_field
+    ));
+ 
+    // ---- Scope del constructor: parámetros disponibles (sin self) -------
+    generator.push_scope();
+    for (p_id, llvm_ty) in &effective_ctor_params {
+        let ptr = generator.next_temp();
+        generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
+        generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
+        generator.define_variable(p_id.clone(), ptr, llvm_ty.clone());
+    }
+ 
+    // ---- Inicializar campos del padre mediante llamada a _init_fields ----
+    //
+    // Si T hereda de P, llamamos @P_init_fields(ptr %self, <args_padre>).
+    // Separamos la lógica de inicialización del malloc en _init_fields para
+    // poder reutilizarla desde el constructor hijo sin duplicar código.
+    if let Some(ref parent_nm) = parent_name {
+        if let Some( inh) = & mut decl.inheritance {
+            if let Some( parent_args) = & mut inh.parent_args {
+                // El hijo pasa explícitamente los argumentos al padre.
+                let mut arg_strings =  vec![format!("ptr {}", self_ptr)];
+                for arg_expr in  parent_args {
+                    let res = arg_expr.accept(generator);
+                    arg_strings.push(format!("{} {}", res.llvm_type, res.register));
+                }
+                generator.emit(format!(
+                    "call void @{}_init_fields({})",
+                    parent_nm, arg_strings.join(", ")
+                ));
+            }
+            // Si parent_args es None: el hijo hereda los mismos parámetros implícitamente.
+            // En ese caso propagamos todos los parámetros efectivos al padre.
+            else {
+                let mut arg_strings = vec![format!("ptr {}", self_ptr)];
+                for (p_id, llvm_ty) in &effective_ctor_params {
+                    // Leemos desde el alloca que ya generamos arriba.
+                    if let Some((ptr, _)) = generator.resolve_variable(p_id) {
+                        let loaded = generator.next_temp();
+                        generator.emit(format!("{} = load {}, ptr {}", loaded, llvm_ty, ptr));
+                        arg_strings.push(format!("{} {}", llvm_ty, loaded));
+                    }
+                }
+                generator.emit(format!(
+                    "call void @{}_init_fields({})",
+                    parent_nm, arg_strings.join(", ")
+                ));
+            }
+        }
+    }
+ 
+    // ---- Inicializar campos propios de T ----------------------------------
+    // Usamos los índices en `all_fields` para calcular el GEP correcto.
+    // El offset base de los campos propios de T = numero de campos del padre + 1 (vptr).
+    let parent_field_count = parent_name.as_deref()
+        .map(|pn| generator.collect_all_fields(pn).len())
+        .unwrap_or(0);
+ 
+    for (attr_idx, attr) in decl.attributes.iter_mut().enumerate() {
+        // Índice real en el struct LLVM: 0=vptr, 1..parent_count=campos padre, etc.
+        let struct_idx = 1 + parent_field_count + attr_idx;
+        let field_llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
+ 
+        let init_val = attr.initializer.accept(generator);
+ 
+        let field_ptr = generator.next_temp();
+        generator.emit(format!(
+            "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 {}",
+            field_ptr, type_name, self_ptr, struct_idx
+        ));
+        generator.emit(format!(
+            "store {} {}, ptr {}",
+            field_llvm_ty, init_val.register, field_ptr
+        ));
+    }
+ 
+    generator.pop_scope();
+    generator.emit(format!("ret ptr {}", self_ptr));
+    generator.emit_raw("}".to_string());
+    generator.emit_raw("".to_string());
+ 
+    // ------------------------------------------------------------------
+    // 4b.  Emitir @T_init_fields(ptr %self, params...) -> void
+    //
+    //   Función auxiliar que solo inicializa los campos propios de T
+    //   sobre un objeto ya alocado.  Es llamada por los constructores
+    //   de clases hijas para inicializar la parte del padre.
+    //
+    // Fundamento:
+    //   Separar malloc de la inicialización de campos resuelve el problema
+    //   clásico de "diamond init" y evita llamadas recursivas a malloc.
+    //   Un constructor hijo crea el objeto una sola vez y luego delega la
+    //   inicialización de la porción padre a _init_fields.
+    // ------------------------------------------------------------------
+    let init_params: Vec<String> = {
+        let mut v = vec!["ptr %self".to_string()];
+        v.extend(effective_ctor_params.iter().map(|(p_name, llvm_ty)| {
+            format!("{} %param_{}", llvm_ty, p_name)
+        }));
+        v
+    };
+ 
+    generator.emit_raw(format!(
+        "define void @{}_init_fields({}) {{",
+        type_name, init_params.join(", ")
+    ));
+    generator.emit_raw("entry:".to_string());
+ 
+    // Si tenemos padre, primero inicializamos sus campos.
+    if let Some(ref parent_nm) = parent_name {
+        if let Some(inh) = &mut decl.inheritance {
+            if let Some( parent_args) = &mut inh.parent_args {
+                let mut arg_strings = vec!["ptr %self".to_string()];
+                for arg_expr in  parent_args {
+                    // Nota: en _init_fields los parámetros están como %param_xxx
+                    // pero no tenemos scopes activos aquí; necesitamos un scope
+                    // temporal.
+                    generator.push_scope();
+                    for (p_id, llvm_ty) in &effective_ctor_params {
+                        let ptr = generator.next_temp();
+                        generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
+                        generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
+                        generator.define_variable(p_id.clone(), ptr, llvm_ty.clone());
+                    }
+                    let res = arg_expr.accept(generator);
+                    arg_strings.push(format!("{} {}", res.llvm_type, res.register));
+                    generator.pop_scope();
+                }
+                generator.emit(format!(
+                    "call void @{}_init_fields({})",
+                    parent_nm, arg_strings.join(", ")
+                ));
+            } else {
+                // Propagación implícita de parámetros.
+                let mut arg_strings = vec!["ptr %self".to_string()];
+                for (p_id, llvm_ty) in &effective_ctor_params {
+                    arg_strings.push(format!("{} %param_{}", llvm_ty, p_id));
+                }
+                generator.emit(format!(
+                    "call void @{}_init_fields({})",
+                    parent_nm, arg_strings.join(", ")
+                ));
+            }
+        }
+    }
+ 
+    // Inicializar campos propios de T.
+    generator.push_scope();
+    for (p_id, llvm_ty) in &effective_ctor_params {
+        let ptr = generator.next_temp();
+        generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
+        generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
+        generator.define_variable(p_id.clone(), ptr, llvm_ty.clone());
+    }
+ 
+    for (attr_idx, attr) in & mut decl.attributes.iter_mut().enumerate() {
+        let struct_idx = 1 + parent_field_count + attr_idx;
+        let field_llvm_ty = CodeGenerator::hulk_type_to_llvm(&attr.type_annotation);
+        let init_val = attr.initializer.accept(generator);
+        let field_ptr = generator.next_temp();
+        generator.emit(format!(
+            "{} = getelementptr inbounds %{}, ptr %self, i32 0, i32 {}",
+            field_ptr, type_name, struct_idx
+        ));
+        generator.emit(format!(
+            "store {} {}, ptr {}",
+            field_llvm_ty, init_val.register, field_ptr
+        ));
+    }
+    generator.pop_scope();
+ 
+    generator.emit("ret void".to_string());
+    generator.emit_raw("}".to_string());
+    generator.emit_raw("".to_string());
+ 
+    // ------------------------------------------------------------------
+    // 5.  Emitir métodos: @T_m(ptr %self, params...) -> ret
+    // ------------------------------------------------------------------
+    let old_type_ctx = generator.current_type_context.take();
+    generator.current_type_context = Some(type_name.clone());
+ 
+    for method in &mut decl.methods {
+        let method_name = method.name.value.as_id();
+        let return_type=CodeGenerator::hulk_type_to_llvm(&method.return_type);
+        let mut method_params = vec!["ptr %self".to_string()];
+       
+        method_params.extend(method.params.iter().map(|(p_name, p_type)| {
+            let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+            format!("{} %param_{}", llvm_ty, p_name.value.as_id())
+        }));
+ 
+        generator.emit_raw(format!(
+            "define {} @{}_{} ({}) {{",return_type,
+            type_name, method_name,
+            method_params.join(", ")
+        ));
+        generator.emit_raw("entry:".to_string());
+ 
+        generator.push_scope();
+ 
+        // Exponer self en el scope.
+        generator.define_variable(
+            "%self".to_string(),
+            "%self".to_string(),
+            format!("%{}", type_name),
+        );
+ 
+        // ------------------------------------------------------------------
+        // Exponer los campos del struct como variables locales con nombre.
+        //
+        // Por qué es necesario:
+        //   Cuando el cuerpo del método referencia `age`, `visit_id` busca
+        //   "age" en la tabla de símbolos por scope.  Sin este paso, no
+        //   existe ninguna entrada para "age" y el fallback retorna 0.0.
+        //   La solución correcta es emitir, para cada campo del struct
+        //   (incluyendo los heredados), un GEP que apunte al campo dentro
+        //   de %self, seguido de un load que cargue su valor, y registrar
+        //   ese valor como una variable local en el scope del método.
+        //
+        //   Esto es equivalente a lo que C++ hace implícitamente cuando
+        //   dentro de un método accedes a `this->field` sin escribir `this->`.
+        // ------------------------------------------------------------------
+        let all_fields_for_method = generator.collect_all_fields(&type_name);
+        for (field_idx, (field_name, field_llvm_ty)) in &mut all_fields_for_method.iter().enumerate() {
+            // Índice LLVM: +1 porque el índice 0 es el vptr.
+            let struct_idx = field_idx + 1;
+ 
+            // GEP: obtener puntero al campo dentro del struct.
+            let field_gep = generator.next_temp();
+            generator.emit(format!(
+                "{} = getelementptr inbounds %{}, ptr %self, i32 0, i32 {}  ; campo {}",
+                field_gep, type_name, struct_idx, field_name
+            ));
+ 
+            // Load: leer el valor actual del campo.
+            let field_val = generator.next_temp();
+            generator.emit(format!(
+                "{} = load {}, ptr {}",
+                field_val, field_llvm_ty, field_gep
+            ));
+ 
+            // Alloca + store: guardarlo como variable mutable en el scope
+            // para que dest-assign (field := expr) también funcione.
+            let field_ptr = generator.next_temp();
+            generator.emit(format!("{} = alloca {}", field_ptr, field_llvm_ty));
+            generator.emit(format!("store {} {}, ptr {}", field_llvm_ty, field_val, field_ptr));
+ 
+            generator.define_variable(field_name.clone(), field_ptr, field_llvm_ty.clone());
+        }
+ 
+        // Exponer parámetros del método.
+        for (p_name, p_type) in &method.params {
+            let p_id = p_name.value.as_id();
+            let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+            let ptr = generator.next_temp();
+            generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
+            generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
+            generator.define_variable(p_id, ptr, llvm_ty);
+        }
+ 
+        // Registrar el método activo para que visit_base_call pueda resolverlo.
+        generator.current_method_context = Some(method_name.clone());
+ 
+        let result = method.body.accept(generator);
+        generator.emit(format!("ret {} {}", result.llvm_type, result.register));
+ 
+        generator.current_method_context = None; // salir del contexto del método
+        generator.pop_scope();
+        generator.emit_raw("}".to_string());
+        generator.emit_raw("".to_string());
+    }
+ 
+    generator.current_type_context = old_type_ctx;
+}
+
+// ---------------------------------------------------------------------------
+// compile_function_decl  (sin cambios respecto al original)
+// ---------------------------------------------------------------------------
+fn compile_function_decl(generator: &mut CodeGenerator, decl: &mut FunctionDecl) {
+    let name = decl.name.value.as_id();
+    let return_type=CodeGenerator::hulk_type_to_llvm(&decl.return_type);
+    
+    let params: Vec<String> = decl.params.iter().map(|(p_name, p_type)| {
+        let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+        let p_id = p_name.value.as_id();
+        format!("{} %param_{}", llvm_ty, p_id)
+    }).collect();
+
+    generator.emit_raw(format!("define {} @{}({}) {{", return_type, name, params.join(", ")));
+    generator.emit_raw("entry:".to_string());
+
+    generator.push_scope();
+    for (p_name, p_type) in &decl.params {
+        let p_id = p_name.value.as_id();
+        let llvm_ty = CodeGenerator::hulk_type_to_llvm(p_type);
+        let ptr = generator.next_temp();
+        generator.emit(format!("{} = alloca {}", ptr, llvm_ty));
+        generator.emit(format!("store {} %param_{}, ptr {}", llvm_ty, p_id, ptr));
+        generator.define_variable(p_id, ptr, llvm_ty);
+    }
+
+    let result = decl.body.accept(generator);
+    generator.emit(format!("ret {} {}", result.llvm_type, result.register));
+    generator.pop_scope();
+
+    generator.emit_raw("}".to_string());
+    generator.emit_raw("".to_string());
+}
+
+// ---------------------------------------------------------------------------
+// compile_hulk_program
+// ---------------------------------------------------------------------------
+pub fn compile_hulk_program(
+    program: &mut Program,
+    _module_name: &str,
+    ir_output: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut generator = CodeGenerator::new();
+
+    let mut header: Vec<String> = vec![
+        "; ModuleID = 'hulk'".to_string(),
+        "target triple = \"x86_64-pc-linux-gnu\"".to_string(),
+        "".to_string(),
+        "declare ptr @malloc(i64)".to_string(),
+        "declare i64 @strlen(ptr)".to_string(),
+        "declare ptr @strcpy(ptr, ptr)".to_string(),
+        "declare ptr @strcat(ptr, ptr)".to_string(),
+        "declare void @abort() noreturn".to_string(),
+        "".to_string(),
+        "declare i32 @printf(ptr, ...)".to_string(),
+        "@.fmt_double = private unnamed_addr constant [4 x i8] c\"%g\\0A\\00\"".to_string(),
+        "@.fmt_str    = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"".to_string(),
+        "@.str_true   = private unnamed_addr constant [5 x i8] c\"true\\00\"".to_string(),
+        "@.str_false  = private unnamed_addr constant [6 x i8] c\"false\\00\"".to_string(),
+        "@.str_cast_error = private unnamed_addr constant [43 x i8] c\"HULK runtime error: invalid downcast (as)\\0A\\00\"".to_string(),
+        "".to_string(),
+    ];
+
+    let mut type_decls: Vec<&mut TypeDeclNode> = Vec::new();
+    let mut fun_decls:  Vec<&mut FunctionDecl> = Vec::new();
+    let mut expressions: Vec<&mut Expr>   = Vec::new();
+
+    for stmt in &mut program.statements {
+        match stmt {
+            Statement::TypeDecl(td)     => type_decls.push(td),
+            Statement::FunctionDecl(fd) => fun_decls.push(fd),
+            Statement::Expression(e)    => expressions.push(e),
+        }
+    }
+
+    // PASADA 1: tipos (structs + vtables + constructores + métodos)
+    for td in &mut type_decls {
+        compile_type_decl(&mut generator,  td);
+    }
+
+    // PASADA 2: funciones globales
+    for fd in &mut fun_decls {
+        compile_function_decl(&mut generator,  fd);
+    }
+
+    generator.emit_raw("define void @hulk_cast_error() noreturn {".to_string());
+    generator.emit_raw("entry:".to_string());
+    generator.emit("call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr @.str_cast_error)".to_string());
+    generator.emit("call void @abort()".to_string());
+    generator.emit("unreachable".to_string());
+    generator.emit_raw("}".to_string());
+    generator.emit_raw("".to_string());
+
+    // PASADA 3: expresiones de top-level en @main
+    generator.emit_raw("define i32 @main() {".to_string());
+    generator.emit_raw("entry:".to_string());
+
+    let mut top_exprs: Vec<GeneratorResult> = Vec::new();
+
+    for e in &mut expressions{
+        top_exprs.push(e.accept(&mut generator));
+    }
+    //  expressions
+    //     .into_iter()
+    //     .map(|e| e.accept(&mut generator))
+    //     .collect();
+
+    let last_result = top_exprs.last().cloned().unwrap_or_else(|| {
+        GeneratorResult::new("0".to_string(), "i32".to_string())
+    });
+
+    if last_result.llvm_type == "i1" {
+        let ret_reg = generator.next_temp();
+        generator.emit(format!("{} = zext i1 {} to i32", ret_reg, last_result.register));
+        generator.emit(format!("ret i32 {}", ret_reg));
+    } else {
+        generator.emit("ret i32 0".to_string());
+    }
+
+    generator.emit_raw("}".to_string());
+
+    header.extend(generator.global_decls);
+    header.extend(generator.code);
+    let full_ir = header.join("\n");
+
+    if let Some(path) = ir_output {
+        fs::write(path, &full_ir)?;
+    }
+
+    Ok(full_ir)
+}
+</file>
+
+<file path="expr_visitor.rs">
+use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::Expr, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, member_access_node::{MemberAccessNode, MethodCallNode}, type_downcast_node::TypeDowncastNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode};
+
+ 
+
+pub trait ExprVisitor<T> {
+    fn visit_number(&mut self, n: f32) -> T;
+    fn visit_bool(&mut self, b: bool) -> T;
+    fn visit_string(&mut self, s: &str) -> T;
+    fn visit_id(&mut self, id: &str) -> T;
+    fn visit_binary_op(&mut self, left: &mut Expr, op: &BinaryOp, right: &mut Expr) -> T;
+    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &mut Expr) -> T;
+    fn visit_let(&mut self, node: &mut LetNode) -> T;
+    fn visit_if(&mut self, node: &mut IfNode) -> T;
+    fn visit_while(&mut self, node: &mut WhileNode) -> T;
+    fn visit_for(&mut self, node: &mut ForNode) -> T;
+    fn visit_fun_call(&mut self, node: &mut FunCallNode) -> T;
+    fn visit_dest_assign(&mut self, node: &mut DestAssignNode) -> T;
+    fn visit_block(&mut self, node: &mut BlockNode) -> T;
+    fn visit_instantiation(&mut self, node: &mut InstantiationNode) -> T;
+    fn visit_member_access(&mut self, node: &mut MemberAccessNode) -> T;
+    fn visit_method_call(&mut self, node: &mut MethodCallNode) -> T;
+    fn visit_self(&mut self) -> T;
+    fn visit_base_call(&mut self, args: &mut [Expr]) -> T;
+    fn visit_type_downcast(&mut self, node: &mut TypeDowncastNode) -> T;
+    fn visit_type_test(&mut self, node: &mut TypeTestNode) -> T;
+}
+</file>
+
+<file path="grammar.lalrpop">
+use std::str::FromStr;
+use crate::nodes::{
+    binaryop_node::{BinaryOp, BinaryOpNode},
+    block_node::BlockNode,
+    destassing_node::DestAssignNode,
+    for_node::ForNode,
+    funcall_node::FunCallNode,
+    function_decl_node::FunctionDecl,
+    if_node::IfNode,
+    instantiation_node::InstantiationNode,
+    let_node::LetNode,
+    literal_node::{Literal, LiteralNode},
+    member_access_node::{MemberAccessNode, MethodCallNode},
+    program_node::{Program, Statement},
+    type_decl_node::{TypeDeclNode, AttributeNode, TypeBodyItem, InheritanceClause},
+    expr_node::{Expr, HulkType},
+    unaryop_node::{UnaryOp, UnaryOpNode},
+    while_node::WhileNode,
+    type_test_node::TypeTestNode,
+    type_downcast_node::TypeDowncastNode
+};
+
+grammar;
+
+pub Program: Program = {
+    <stmts:Statement+> => Program::new(stmts),
+};
+
+Statement: Statement = {
+    <FunctionDecl> => Statement::FunctionDecl(<>),
+    <TypeDecl> => Statement::TypeDecl(<>),
+    <expr:TopExpr> => Statement::Expression(expr),
+};
+
+// Top level: SimpleExpr requiere ; u BlockExpr tiene ; opcional
+TopExpr: Expr = {
+    <e:SimpleExpr> ";" => e,
+    <e:BlockExpr> (";")?  => e
+};
+
+FunctionDecl: FunctionDecl = {
+    "function" <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> "=>" <body:ExprRule> ";" => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+    },
+    "function" <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> <body:BlockExpr> (";")?  => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+    },
+};
+
+MethodDecl: FunctionDecl = {
+    <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> "=>" <body:ExprRule> ";" => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+    },
+    <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> <body:BlockExpr> (";")?  => {
+        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+    },
+};
+
+TypeDecl: TypeDeclNode = {
+    "type" <name:Ident> <params:("(" <Comma<Param>> ")")?> <inheritance:InheritanceClause?> "{" <body:TypeBodyItem*> "}" => {
+        let mut attributes = Vec::new();
+        let mut methods = Vec::new();
+        for item in body {
+            match item {
+                TypeBodyItem::Assignment(a) => attributes.push(a),
+                TypeBodyItem::FunctionDecl(m) => methods.push(m),
+            }
+        }
+        TypeDeclNode::with_inheritance(name, params.unwrap_or(vec![]),attributes, methods,inheritance)
+    }
+};
+
+InheritanceClause: InheritanceClause = {
+    "inherits" <parent:Ident> => InheritanceClause::new(parent, None),
+    "inherits" <parent:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
+        InheritanceClause::new(parent, Some(args))
+    },
+};
+
+TypeBodyItem: TypeBodyItem = {
+    <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> ";" => {
+        TypeBodyItem::Assignment(AttributeNode::new(id, ty.unwrap_or(HulkType::Unknown), expr))
+    },
+    <MethodDecl> => TypeBodyItem::FunctionDecl(<>),
+};
+ 
+
+ 
+
+Param: (LiteralNode, HulkType) = {
+    <id:Ident> <ty:TypeAnnotation?> => (id, ty.unwrap_or(HulkType::Unknown))
+};
+
+TypeAnnotation: HulkType = {
+    ":" <Type> => <>
+};
+
+Type: HulkType = {
+    "Number" => HulkType::Number,
+    "String" => HulkType::String,
+    "Boolean" => HulkType::Bool,
+    <id:Ident> =>  HulkType::Class(id.value.as_id())
+};
+
+
+Comma<T>: Vec<T> = { 
+    <mut v:(<T> ",")*> <e:T?> => match e { 
+        None => v,
+        Some(e) => {
+            v.push(e);
+            v
+        }
+    }
+};
+
+// Expresión pura (sin ; manejo): usado dentro de Let, If, While, For
+pub ExprRule: Expr = {
+    SimpleExpr,
+    BlockExpr,
+};
+
+// Expresiones simples que requieren ; en top level (pero el ; se agrega en TopExpr)
+SimpleExpr: Expr = {
+    LetExpr,
+    IfExpr,
+    WhileExpr,
+    ForExpr,
+    ConcExpr,
+};
+
+// Bloques que tienen ; opcional en top level
+BlockExpr: Expr = {
+    "{" <exprs:(BlockItem)*> "}"  => {
+        Expr::Block(BlockNode::new(exprs))
+    }
+};
+
+// Items dentro de un bloque: pueden ser simples (con ;) o bloques (con ; opcional)
+BlockItem: Expr = {
+    <e:SimpleExpr> ";" => e,
+    <e:BlockExpr> (";")?  => e
+};
+
+LetExpr: Expr = {
+    "let" <assignments:Comma<Assignment>> "in" <body:ExprRule> => {
+        Expr::Let(LetNode::new(assignments, body))
+    },
+};
+
+IfExpr: Expr = {
+    "if" "(" <cond:OrExpr> ")" <true_branch:ExprRule> <elif_branches:Elif*> "else" <false_branch:ExprRule> => {
+        Expr::If(IfNode::new(cond, true_branch, elif_branches, false_branch))
+    },
+};
+
+Elif: (Expr, Expr) = {
+    "elif" "(" <cond:OrExpr> ")" <body:ExprRule> => (cond, body),
+};
+
+WhileExpr: Expr = {
+    "while" "(" <cond:OrExpr> ")" <body:ExprRule> => {
+        Expr::While(WhileNode::new(cond, body))
+    },
+};
+
+ForExpr: Expr = {
+    "for" "(" <var:Ident> "in" "range" "(" <iter1:OrExpr> "," <iter2:OrExpr> ")" ")" <body:ExprRule> => {
+        let iter = Expr::FunCall(FunCallNode::new(LiteralNode::new(Literal::Id("range".to_string())), vec![iter1, iter2]));
+        Expr::For(ForNode::new(var, iter, body))
+    },
+};
+
+Assignment: ((LiteralNode, HulkType), Expr) = {
+    <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
+};
+
+pub ConcExpr : Expr = {
+    <l: ConcExpr> <op : ConcOpcode> <r: OrExpr> => {
+        Expr::Binary(BinaryOpNode::new(l,op,r))
+    },
+    OrExpr,
+};
+
+ConcOpcode: BinaryOp = {
+    "@" => BinaryOp::SingleConc,
+    "@@" => BinaryOp::SpacedConc
+};
+
+pub OrExpr: Expr = { 
+    <l:OrExpr> <op:OrOpcode> <r:AndExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    AndExpr,
+};
+
+OrOpcode: BinaryOp = {
+    "|" => BinaryOp::Or,
+    "||" => BinaryOp::Or
+};
+
+pub AndExpr: Expr = {
+    <l:AndExpr> <op:AndOpcode> <r:AssignExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    AssignExpr,
+};
+
+AndOpcode: BinaryOp = {
+    "&" => BinaryOp::And,
+    "&&" => BinaryOp::And
+};
+
+AssignExpr: Expr = {
+    <id:Term> ":=" <expr:AssignExpr> => {
+        Expr::DestAssign(DestAssignNode::new(id, expr))
+    },
+    CompExpr,
+};
+
+pub CompExpr: Expr = {
+    <l:CompExpr> <op:CompOpcode> <r:IsExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    IsExpr,
+};
+
+CompOpcode: BinaryOp = { 
+    "==" => BinaryOp::Equal,
+    "!=" => BinaryOp::Dist,
+    ">=" => BinaryOp::Gequa,
+    "<=" => BinaryOp::Lequa,
+    ">" => BinaryOp::Great,
+    "<" => BinaryOp::Less
+};
+
+pub IsExpr: Expr = {
+    <l:IsExpr> "is" <r:Ident> => {
+        Expr::TypeTest(TypeTestNode::new(l,r))
+    },
+    AsExpr,
+};
+
+pub AsExpr: Expr = {
+    <l:AsExpr> "as" <r:Ident> => {
+        Expr::TypeDowncast(TypeDowncastNode::new(l,r))
+    },
+    ArithExpr,
+};
+
+pub ArithExpr: Expr = {
+    <l:ArithExpr> <op:ArithOpCode> <r:FactAnd> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    FactAnd,
+};
+
+ArithOpCode: BinaryOp = { 
+    "+" => BinaryOp::Add,
+    "-" => BinaryOp::Sub,
+};
+
+FactAnd: Expr = {
+    <l:FactAnd> <op:FactAndOp> <r:UnaryExpr> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    UnaryExpr,
+};
+
+FactAndOp: BinaryOp = {
+    "*" => BinaryOp::Mul,
+    "/" => BinaryOp::Div,
+    "%" => BinaryOp::Mod,
+};
+
+UnaryExpr: Expr = {
+    <op:UnaryOpCode> <expr:Base> => {
+        Expr::Unary(UnaryOpNode::new(op, expr))
+    },
+    Base,
+};
+
+UnaryOpCode: UnaryOp = {
+    "+" => UnaryOp::Plus,
+    "-" => UnaryOp::Neg,
+    "!" => UnaryOp::Not,
+};
+
+Base: Expr = {
+    <l:Base> <op:PowOpcode> <r:Term> => {
+        Expr::Binary(BinaryOpNode::new(l, op, r))
+    },
+    Term,
+};
+
+PowOpcode: BinaryOp = {
+    "^" => BinaryOp::Pow
+};
+
+Term: Expr = {
+    Num => Expr::Literal(LiteralNode::new(Literal::Number(<>))),
+    "true" => Expr::Literal(LiteralNode::new(Literal::Bool(true))),
+    "false" => Expr::Literal(LiteralNode::new(Literal::Bool(false))),
+    StringLit => Expr::Literal(LiteralNode::new(Literal::Str(<>))),
+    "new" <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
+        Expr::Instantiation(FunCallNode::new(id, args))
+    },
+    <inst:Term> "." <call:FunCall> => {
+        Expr::MethodCall(MethodCallNode::new(inst, call))
+    },
+    <inst:Term> "." <member:Ident> => {
+        Expr::MemberAccess(MemberAccessNode::new(inst, member))
+    },
+    <FunCall> => Expr::FunCall(<>),
+    "(" <ExprRule> ")" ,
+    "base" "(" <args:Comma<SimpleExpr>> ")" => Expr::BaseCall(args),
+    "self" => Expr::SelfRef,
+    <id: Ident> => Expr::Literal(id)
+};
+
+FunCall: FunCallNode = {
+    <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
+        FunCallNode::new(id, args)
+    },
+};
+
+Num: f32 = {
+    r"[0-9]+(\.[0-9]+)?" => f32::from_str(<>).unwrap()
+};
+
+StringLit: String = {
+    r#""[^"]*""# => <>.trim_matches('"').to_string()
+};
+
+Ident: LiteralNode = {
+    r"[a-zA-Z_][a-zA-Z0-9_]*" => LiteralNode::new(Literal::Id(<>.to_string())),
+};
+</file>
+
+<file path="main.rs">
+use lalrpop_util::lalrpop_mod;
+
+pub mod expr_visitor;
+lalrpop_mod!(grammar);
+pub mod codegen;
+pub mod codegen_visitor;
+pub mod type_inferrer;      // antes: semantic
+pub mod semantic;   // nuevo
+pub mod nodes {
+    pub mod expr_node;
+    pub mod function_decl_node;
+    pub mod literal_node;
+    pub mod destassing_node;
+    pub mod block_node;
+    pub mod binaryop_node;
+    pub mod unaryop_node;
+    pub mod for_node;
+    pub mod funcall_node;
+    pub mod if_node;
+    pub mod while_node;
+    pub mod let_node;
+    pub mod program_node;
+    pub mod type_decl_node;
+    pub mod member_access_node;
+    pub mod instantiation_node;
+    pub mod type_downcast_node;
+    pub mod type_test_node;
+}
+
+fn main() {
+    let input = "type A {
+    
+}
+
+type B inherits A {
+    
+}
+
+type C inherits B {
+   
+}
+
+let x = new B() in
+    if (x is B)
+        let y : A = x as A in {
+            
+        }
+    else {
+       
+};";
+
+    // ---- 1. Parseo --------------------------------------------------------
+    let parser = grammar::ProgramParser::new();
+    let mut program = match parser.parse(input) {
+        Ok(ast) => ast,
+        Err(e) => {
+            eprintln!("Error de sintaxis: {:?}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // ---- 2. Inferencia de tipos -------------------------------------------
+    // El inferidor anota el AST con HulkType concretos y acumula solo errores
+    // estructurales (e.g. función no encontrada durante la generación de
+    // restricciones, que impediría seguir).
+    
+let mut inferrer = type_inferrer::TypeInferrer::new();
+    inferrer.infer_program(&mut program);
+
+    if !inferrer.inference_errors.is_empty() {
+        eprintln!("Errores durante la inferencia de tipos:");
+        for e in &inferrer.inference_errors {
+            eprintln!("  - {}", e);
+        }
+        std::process::exit(1);
+}
+
+    // ---- 3. Chequeo semántico ---------------------------------------------
+    // El checker recibe el entorno construido por el inferidor (jerarquía de
+    // tipos, firmas de funciones) y el AST ya anotado, y verifica todas las
+    // reglas semánticas sobre los tipos resueltos.
+    
+    // El entorno se mueve al checker: si necesitaras acceder a él después,
+    // añade un campo público o un getter.
+    let mut checker = semantic::SemanticChecker::new(inferrer.env);
+    checker.check_program(&program);
+
+    if !checker.errors.is_empty() {
+        eprintln!("Errores semánticos:");
+        for e in &checker.errors {
+            eprintln!("  - {}", e);
+        }
+        std::process::exit(1);
+    }
+
+    // ---- 4. Generación de código ------------------------------------------
+    println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
+    println!("{:#?}", program);
+
+    match codegen::compile_hulk_program(&mut program, "hulk_module", Some("output.ll")) {
+        Ok(_)  => println!("LLVM IR generado exitosamente."),
+        Err(e) => eprintln!("Error generando IR: {}", e),
+    }
+}
+</file>
+
+<file path="semantic.rs">
+//! # Chequeo semántico para HULK
+//!
+//! ## Responsabilidad
+//!
+//! Este módulo recibe el AST **ya anotado** por `TypeInferrer` y verifica todas
+//! las reglas semánticas del lenguaje.  No infiere tipos: solo los lee de los
+//! nodos y comprueba que sean correctos.
+//!
+//! ## Reglas verificadas
+//!
+//! ### Operaciones binarias
+//! - Operandos de aritmética (`+`, `-`, `*`, `/`, `%`, `^`) deben ser `Number`.
+//! - Operandos de comparación relacional (`<`, `>`, `<=`, `>=`) deben ser `Number`.
+//! - Operandos de igualdad (`==`, `!=`) deben tener el mismo tipo.
+//! - Operandos lógicos (`&`, `|`) deben ser `Bool`.
+//! - Operandos de concatenación (`@`, `@@`) deben conformar a `String`.
+//!
+//! ### Operaciones unarias
+//! - `!expr` → `expr` debe ser `Bool`.
+//! - `-expr`, `+expr` → `expr` debe ser `Number`.
+//!
+//! ### Condicionales
+//! - La condición de `if`/`elif`/`while` debe ser `Bool`.
+//!
+//! ### Variables y asignación
+//! - La variable en `:=` debe estar declarada en el scope.
+//! - El tipo del valor asignado debe conformar al tipo declarado.
+//!
+//! ### Funciones
+//! - Toda función llamada debe estar declarada.
+//! - El número de argumentos debe coincidir con la aridad.
+//! - Cada argumento debe conformar al tipo del parámetro correspondiente.
+//! - El tipo del cuerpo debe conformar al tipo de retorno declarado.
+//!
+//! ### Tipos y constructores
+//! - Todo tipo instanciado debe estar declarado.
+//! - El número de argumentos del constructor debe coincidir.
+//! - Cada argumento debe conformar al parámetro correspondiente.
+//!
+//! ### Acceso a miembros
+//! - Solo se puede acceder a campos/métodos sobre valores de tipo clase.
+//! - El campo/método debe existir en la clase (o en algún ancestro).
+//! - En llamadas a método, la aridad y tipos de argumentos deben ser correctos.
+//!
+//! ### `self` y `base()`
+//! - `self` solo es válido dentro de un método de tipo.
+//! - `base()` solo es válido dentro de un método de un tipo que tenga padre.
+//! - `base()` solo es válido si el padre define el mismo método.
+
+use std::collections::HashMap;
+
+use crate::{
+    nodes::{
+        binaryop_node::BinaryOp,
+        expr_node::{Expr, HulkType},
+        function_decl_node::FunctionDecl,
+        literal_node::Literal,
+        program_node::{Program, Statement},
+        type_decl_node::TypeDeclNode,
+        unaryop_node::UnaryOp,
+    }, type_inferrer::InferType
+    
+
+};
+use crate::type_inferrer::Environment;
+
+// ============================================================================
+// Chequedor semántico
+// ============================================================================
+
+pub struct SemanticChecker {
+    /// Errores semánticos encontrados.
+    pub errors: Vec<String>,
+    /// Referencia al entorno construido por el inferidor (tipos y funciones).
+    /// El checker lo recibe tras la inferencia y lo usa en modo solo-lectura
+    /// para verificar jerarquía, aridad, etc.
+    env: Environment,
+    /// Contexto: tipo de `self` en el método actual (`None` si no estamos en uno).
+    self_type: Option<String>,
+    /// Contexto: nombre del método en curso (para validar `base()`).
+    current_method: Option<String>,
+    /// Scope de variables locales: nombre → tipo ya resuelto.
+    /// Se reconstruye al verificar funciones, tipos y expresiones `let`.
+    scopes: Vec<HashMap<String, HulkType>>,
+}
+
+impl SemanticChecker {
+    /// Crea un checker a partir del entorno producido por `TypeInferrer`.
+    pub fn new(env: Environment) -> Self {
+        Self {
+            errors: Vec::new(),
+            env,
+            self_type: None,
+            current_method: None,
+            scopes: vec![HashMap::new()],
+        }
+    }
+
+    // ========================================================================
+    // Punto de entrada público
+    // ========================================================================
+
+    /// Verifica el AST ya anotado.  Devuelve `true` si no hay errores.
+    pub fn check_program(&mut self, program: &Program) -> bool {
+        for stmt in &program.statements {
+            match stmt {
+                Statement::FunctionDecl(decl) => self.check_function_decl(decl),
+                Statement::TypeDecl(decl)     => self.check_type_decl(decl),
+                Statement::Expression(expr)   => self.check_expr(expr),
+            }
+        }
+        self.errors.is_empty()
+    }
+
+    // ========================================================================
+    // Verificación de declaraciones de función
+    // ========================================================================
+
+    fn check_function_decl(&mut self, decl: &FunctionDecl) {
+        let fn_name = decl.name.value.as_id();
+
+        self.push_scope();
+        for (param_node, param_ty) in &decl.params {
+            if let Literal::Id(ref name) = param_node.value {
+                self.define_var(name.clone(), param_ty.clone());
+            }
+        }
+
+        self.check_expr(&decl.body);
+
+        // Verificar que el cuerpo conforma al tipo de retorno declarado
+        let body_ty = self.type_of(& decl.body);
+        let ret_ty  = &decl.return_type;
+        if !self.conforms(&body_ty, ret_ty) {
+            self.errors.push(format!(
+                "Función '{}': el cuerpo tiene tipo {:?} pero se declaró retorno {:?}.",
+                fn_name, body_ty, ret_ty
+            ));
+        }
+
+        self.pop_scope();
+    }
+
+    // ========================================================================
+    // Verificación de declaraciones de tipo
+    // ========================================================================
+
+    fn check_type_decl(&mut self, decl: &TypeDeclNode) {
+        let type_name = decl.name.value.as_id();
+        self.self_type = Some(type_name.clone());
+
+        // ---- Atributos ----
+        self.push_scope();
+        // Cargar parámetros del constructor en el scope
+        for (param_node, param_ty) in &decl.params {
+            if let Literal::Id(ref name) = param_node.value {
+                self.define_var(name.clone(), param_ty.clone());
+            }
+        }
+
+        for attr in &decl.attributes {
+            self.check_expr(&attr.initializer);
+
+            let init_ty = self.type_of(&attr.initializer);
+            let attr_ty = &attr.type_annotation;
+
+            if *attr_ty != HulkType::Unknown && !self.conforms(&init_ty, attr_ty) {
+                let attr_name = attr.name.value.as_id();
+                self.errors.push(format!(
+                    "Atributo '{}::{}': el inicializador tiene tipo {:?} pero se declaró {:?}.",
+                    type_name, attr_name, init_ty, attr_ty
+                ));
+            }
+        }
+        self.pop_scope();
+
+        // ---- Métodos ----
+        for method in &decl.methods {
+            let method_name = method.name.value.as_id();
+            self.current_method = Some(method_name.clone());
+
+            self.push_scope();
+            self.define_var("self".to_string(), HulkType::Class(type_name.clone()));
+
+            for (param_node, param_ty) in &method.params {
+                if let Literal::Id(ref name) = param_node.value {
+                    self.define_var(name.clone(), param_ty.clone());
+                }
+            }
+
+            self.check_expr(&method.body);
+
+            let body_ty = self.type_of(&method.body);
+            let ret_ty  = &method.return_type;
+
+            if *ret_ty != HulkType::Unknown && !self.conforms(&body_ty, ret_ty) {
+                self.errors.push(format!(
+                    "Método '{}::{}': el cuerpo tiene tipo {:?} pero se declaró retorno {:?}.",
+                    type_name, method_name, body_ty, ret_ty
+                ));
+            }
+
+            self.pop_scope();
+            self.current_method = None;
+        }
+
+        self.self_type = None;
+    }
+
+    // ========================================================================
+    // Verificación de expresiones (recorrido del AST)
+    // ========================================================================
+
+    fn check_expr(&mut self, expr: &Expr) {
+        match expr {
+            Expr::Literal(_) => {}
+            Expr::SelfRef => {
+                if self.self_type.is_none() {
+                    self.errors.push(
+                        "Error semántico: 'self' usado fuera de un tipo.".to_string()
+                    );
+                }
+            }
+            Expr::Binary(node) => {
+                self.check_expr(&node.left);
+                self.check_expr(&node.right);
+
+                let lt = self.type_of(&node.left);
+                let rt = self.type_of(&node.right);
+
+                match &node.op {
+                    BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul
+                    | BinaryOp::Div | BinaryOp::Mod | BinaryOp::Pow => {
+                        self.expect_type(&lt, &HulkType::Number, "operando izquierdo de aritmética");
+                        self.expect_type(&rt, &HulkType::Number, "operando derecho de aritmética");
+                    }
+                    BinaryOp::Great | BinaryOp::Less
+                    | BinaryOp::Gequa | BinaryOp::Lequa => {
+                        self.expect_type(&lt, &HulkType::Number, "operando izquierdo de comparación");
+                        self.expect_type(&rt, &HulkType::Number, "operando derecho de comparación");
+                    }
+                    BinaryOp::Equal | BinaryOp::Dist => {
+                        if !self.conforms(&lt, &rt) && !self.conforms(&rt, &lt) {
+                            self.errors.push(format!(
+                                "Error de tipo: los operandos de '==' / '!=' tienen tipos incompatibles: {:?} y {:?}.",
+                                lt, rt
+                            ));
+                        }
+                    }
+                    BinaryOp::And | BinaryOp::Or => {
+                        self.expect_type(&lt, &HulkType::Bool, "operando izquierdo lógico");
+                        self.expect_type(&rt, &HulkType::Bool, "operando derecho lógico");
+                    }
+                    BinaryOp::SingleConc | BinaryOp::SpacedConc => {
+                        self.expect_conforms(&lt, &HulkType::String, "operando izquierdo de concatenación");
+                        self.expect_conforms(&rt, &HulkType::String, "operando derecho de concatenación");
+                    }
+                }
+            }
+            Expr::Unary(node) => {
+                self.check_expr(&node.expr);
+                let t = self.type_of(&node.expr);
+                match &node.op {
+                    UnaryOp::Not => {
+                        self.expect_type(&t, &HulkType::Bool, "operando de '!'");
+                    }
+                    UnaryOp::Neg | UnaryOp::Plus => {
+                        self.expect_type(&t, &HulkType::Number, "operando de negación/positivo");
+                    }
+                }
+            }
+            Expr::Let(node) => {
+                let mut scopes_opened = 0usize;
+
+                for ((id_node, decl_ty), init_expr) in &node.assignments {
+                    self.check_expr(init_expr);
+
+                    let init_ty = self.type_of(init_expr);
+
+                    // Si hay anotación explícita, verificar conformidad
+                    if *decl_ty != HulkType::Unknown && !self.conforms(&init_ty, decl_ty) {
+                        let var_name = id_node.value.as_id();
+                        self.errors.push(format!(
+                            "Variable '{}': el inicializador tiene tipo {:?} pero se declaró {:?}.",
+                            var_name, init_ty, decl_ty
+                        ));
+                    }
+
+                    // El tipo efectivo de la variable es el declarado (si existe)
+                    // o el inferido del inicializador
+                    let effective_ty = if *decl_ty != HulkType::Unknown {
+                        decl_ty.clone()
+                    } else {
+                        init_ty
+                    };
+
+                    self.push_scope();
+                    scopes_opened += 1;
+                    if let Literal::Id(ref name) = id_node.value {
+                        self.define_var(name.clone(), effective_ty);
+                    }
+                }
+
+                self.check_expr(&node.body);
+
+                for _ in 0..scopes_opened { self.pop_scope(); }
+            }
+            Expr::If(node) => {
+                self.check_expr(&node.condition);
+                let cond_ty = self.type_of(&node.condition);
+                self.expect_type(&cond_ty, &HulkType::Bool, "condición de 'if'");
+
+                self.check_expr(&node.if_branch);
+
+                for (elif_cond, elif_body) in &node.elif_branches {
+                    self.check_expr(elif_cond);
+                    let ec_ty = self.type_of(elif_cond);
+                    self.expect_type(&ec_ty, &HulkType::Bool, "condición de 'elif'");
+                    self.check_expr(elif_body);
+                }
+
+                self.check_expr(&node.else_branch);
+            }
+            Expr::While(node) => {
+                self.check_expr(&node.condition);
+                let cond_ty = self.type_of(&node.condition);
+                self.expect_type(&cond_ty, &HulkType::Bool, "condición de 'while'");
+                self.check_expr(&node.body);
+            }
+            Expr::For(node) => {
+                self.check_expr(&node.iterator);
+                self.push_scope();
+                if let Literal::Id(ref var_name) = node.variable.value {
+                    self.define_var(var_name.clone(), HulkType::Number);
+                }
+                self.check_expr(&node.body);
+                self.pop_scope();
+            }
+            Expr::Block(node) => {
+                for e in &node.expressions { self.check_expr(e); }
+            }
+            Expr::FunCall(node) => {
+                for arg in &node.args { self.check_expr(arg); }
+
+                if let Literal::Id(ref fn_name) = node.name.value {
+                    match self.env.functions.get(fn_name).cloned() {
+                        None => {
+                            self.errors.push(format!(
+                                "Error semántico: función '{}' no declarada.", fn_name
+                            ));
+                        }
+                        Some((param_tys, _ret_ty)) => {
+                            let variadic = param_tys.len() == 1
+                                && param_tys[0] == InferType::unknown();
+
+                            if !variadic {
+                                if param_tys.len() != node.args.len() {
+                                    self.errors.push(format!(
+                                        "Error de tipo: '{}' espera {} argumento(s), se dieron {}.",
+                                        fn_name, param_tys.len(), node.args.len()
+                                    ));
+                                } else {
+                                    for (arg, param_ty) in node.args.iter().zip(param_tys.iter()) {
+                                        let arg_ty = self.type_of(arg);
+                                        let expected = self.resolve_infer(param_ty);
+                                        if !self.conforms(&arg_ty, &expected) {
+                                            self.errors.push(format!(
+                                                "Error de tipo en llamada a '{}': se esperaba {:?} pero se obtuvo {:?}.",
+                                                fn_name, expected, arg_ty
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::Instantiation(node) => {
+                for arg in &node.args { self.check_expr(arg); }
+
+                if let Literal::Id(ref type_name) = node.name.value {
+                    match self.env.types.get(type_name).cloned() {
+                        None => {
+                            self.errors.push(format!(
+                                "Error semántico: tipo '{}' no declarado.", type_name
+                            ));
+                        }
+                        Some(ti) => {
+                            let effective_params: Vec<_> = if ti.params.is_empty() {
+                                ti.parent.as_ref()
+                                    .and_then(|p| self.env.types.get(p))
+                                    .map(|pt| pt.params.clone())
+                                    .unwrap_or_default()
+                            } else {
+                                ti.params.clone()
+                            };
+
+                            if !effective_params.is_empty()
+                                && node.args.len() != effective_params.len()
+                            {
+                                self.errors.push(format!(
+                                    "Error de tipo: constructor de '{}' espera {} arg(s), se dieron {}.",
+                                    type_name, effective_params.len(), node.args.len()
+                                ));
+                            } else {
+                                for (arg, param_ty) in node.args.iter().zip(effective_params.iter()) {
+                                    let arg_ty  = self.type_of(arg);
+                                    let expected = self.resolve_infer(param_ty);
+                                    if !self.conforms(&arg_ty, &expected) {
+                                        self.errors.push(format!(
+                                            "Error de tipo en constructor de '{}': se esperaba {:?} pero se obtuvo {:?}.",
+                                            type_name, expected, arg_ty
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Expr::DestAssign(node) => {
+                self.check_expr(&node.expr);
+                let val_ty = self.type_of(&node.expr);
+
+                match node.target.as_ref() {
+                    Expr::Literal(lit) => {
+                        if let Literal::Id(ref var_name) = lit.value {
+                            match self.lookup_var(var_name) {
+                                None => {
+                                    self.errors.push(format!(
+                                        "Error semántico: variable '{}' no declarada en ':='.", var_name
+                                    ));
+                                }
+                                Some(declared_ty) => {
+                                    if !self.conforms(&val_ty, &declared_ty) {
+                                        self.errors.push(format!(
+                                            "Error de tipo en ':=': variable '{}' es {:?} pero se asigna {:?}.",
+                                            var_name, declared_ty, val_ty
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Expr::MemberAccess(ma) => {
+                        self.check_expr(&ma.instance);
+                        let inst_ty = self.type_of(&ma.instance);
+                        if let HulkType::Class(ref tn) = inst_ty {
+                            if let Literal::Id(ref field_name) = ma.member.value {
+                                match self.env.lookup_field(tn, field_name) {
+                                    None => {
+                                        self.errors.push(format!(
+                                            "Error semántico: '{}' no tiene atributo '{}'.", tn, field_name
+                                        ));
+                                    }
+                                    Some(fi) => {
+                                        let field_ty = self.resolve_infer(&fi.infer_type);
+                                        if !self.conforms(&val_ty, &field_ty) {
+                                            self.errors.push(format!(
+                                                "Error de tipo: asignación a '{}::{}' espera {:?} pero se obtuvo {:?}.",
+                                                tn, field_name, field_ty, val_ty
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        } else if inst_ty != HulkType::Unknown {
+                            self.errors.push(format!(
+                                "Error semántico: acceso a miembro sobre tipo no-clase {:?}.", inst_ty
+                            ));
+                        }
+                    }
+                    _ => {
+                        self.errors.push(
+                            "Error semántico: el lado izquierdo de ':=' debe ser una variable o un campo.".to_string()
+                        );
+                    }
+                }
+            }
+            Expr::MemberAccess(node) => {
+                self.check_expr(&node.instance);
+                let inst_ty = self.type_of(&node.instance);
+
+                match &inst_ty {
+                    HulkType::Class(tn) => {
+                        if let Literal::Id(ref field_name) = node.member.value {
+                            if self.env.lookup_field(tn, field_name).is_none() {
+                                self.errors.push(format!(
+                                    "Error semántico: '{}' no tiene atributo '{}'.", tn, field_name
+                                ));
+                            }
+                        }
+                    }
+                    HulkType::Unknown => {} // silencioso: ya fallaron otros checks
+                    other => {
+                        self.errors.push(format!(
+                            "Error semántico: acceso a miembro sobre tipo primitivo {:?}.", other
+                        ));
+                    }
+                }
+            }
+            Expr::MethodCall(node) => {
+                self.check_expr(&node.instance);
+                for arg in &node.call.args { self.check_expr(arg); }
+
+                let inst_ty = self.type_of(&node.instance);
+
+                match &inst_ty {
+                    HulkType::Class(tn) => {
+                        let method_name = node.call.name.value.as_id();
+                        match self.env.lookup_method(tn, &method_name) {
+                            None => {
+                                self.errors.push(format!(
+                                    "Error semántico: '{}' no tiene método '{}'.", tn, method_name
+                                ));
+                            }
+                            Some(mi) => {
+                                if mi.param_types.len() != node.call.args.len() {
+                                    self.errors.push(format!(
+                                        "Error de tipo: '{}::{}' espera {} arg(s), se dieron {}.",
+                                        tn, method_name, mi.param_types.len(), node.call.args.len()
+                                    ));
+                                } else {
+                                    for (arg, param_ty) in
+                                        node.call.args.iter().zip(mi.param_types.iter())
+                                    {
+                                        let arg_ty  = self.type_of(arg);
+                                        let expected = self.resolve_infer(param_ty);
+                                        if !self.conforms(&arg_ty, &expected) {
+                                            self.errors.push(format!(
+                                                "Error de tipo en '{}::{}': se esperaba {:?} pero se obtuvo {:?}.",
+                                                tn, method_name, expected, arg_ty
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    HulkType::Unknown => {}
+                    other => {
+                        self.errors.push(format!(
+                            "Error semántico: llamada a método sobre tipo primitivo {:?}.", other
+                        ));
+                    }
+                }
+            }
+            Expr::BaseCall(args) => {
+                for arg in args { self.check_expr(arg); }
+
+                let self_type = match &self.self_type {
+                    Some(t) => t.clone(),
+                    None => {
+                        self.errors.push("'base()' fuera de un tipo.".to_string());
+                        return;
+                    }
+                };
+                let method_name = match &self.current_method {
+                    Some(m) => m.clone(),
+                    None => {
+                        self.errors.push("'base()' fuera de un método.".to_string());
+                        return;
+                    }
+                };
+
+                let parent_name = match self.env.types.get(&self_type)
+                    .and_then(|ti| ti.parent.clone())
+                {
+                    Some(p) => p,
+                    None => {
+                        self.errors.push(format!(
+                            "'base()' en '{}' que no tiene padre.", self_type
+                        ));
+                        return;
+                    }
+                };
+
+                if self.env.lookup_method(&parent_name, &method_name).is_none() {
+                    self.errors.push(format!(
+                        "El padre '{}' no tiene método '{}'.", parent_name, method_name
+                    ));
+                }
+            }
+            Expr::TypeDowncast(node) => {
+                self.check_expr(&node.expr);
+ 
+                let expr_ty = self.type_of(&node.expr);
+                let target_name = node.target_type.value.as_id();
+ 
+                // Rule 1: source must be a class type.
+                match &expr_ty {
+                    HulkType::Class(_) | HulkType::Unknown => {}
+                    other => {
+                        self.errors.push(format!(
+                            "Error semántico: el operador 'as' no puede aplicarse a tipo primitivo {:?}.",
+                            other
+                        ));
+                        return; // no further checks make sense
+                    }
+                }
+ 
+                // Rule 2: target type must exist.
+                if !self.env.types.contains_key(&target_name) {
+                    self.errors.push(format!(
+                        "Error semántico: el tipo '{}' usado en 'as' no está declarado.",
+                        target_name
+                    ));
+                    return;
+                }
+ 
+                // Rule 3: source and target must be related (one is an
+                // ancestor of the other).
+                if let HulkType::Class(ref source_name) = expr_ty {
+                    let source_is_ancestor_of_target =
+                        self.env.is_subtype(&target_name, source_name);
+                    let target_is_ancestor_of_source =
+                        self.env.is_subtype(source_name, &target_name);
+ 
+                    if !source_is_ancestor_of_target && !target_is_ancestor_of_source {
+                        self.errors.push(format!(
+                            "Error semántico: 'as' entre tipos no relacionados: '{}' y '{}'.",
+                            source_name, target_name
+                        ));
+                    }
+                }
+                // If expr_ty is Unknown we skip Rule 3 silently — the type
+                // inferrer could not determine the source type, and the
+                // runtime will handle it.
+            }
+        ,
+        Expr::TypeTest(node) => {
+            self.check_expr(&node.expr);
+
+            let expr_ty = self.type_of(&node.expr);
+
+            // Rule 1: source must be a class type (or Unknown to allow
+            // partially-inferred programs to proceed).
+            match &expr_ty {
+                HulkType::Class(_) | HulkType::Unknown => {}
+                other => {
+                    self.errors.push(format!(
+                        "Error semántico: el operador 'is' no puede aplicarse a tipo primitivo {:?}.",
+                        other
+                    ));
+                }
+            }
+
+            // Rule 2: target type must exist.
+            let target_name = node.target_type.value.as_id();
+            if !self.env.types.contains_key(&target_name) {
+                self.errors.push(format!(
+                    "Error semántico: el tipo '{}' usado en 'is' no está declarado.",
+                    target_name
+                ));
+            }
+        },
+                    }
+    }
+
+    // ========================================================================
+    // Helpers de scope
+    // ========================================================================
+
+    fn push_scope(&mut self) { self.scopes.push(HashMap::new()); }
+    fn pop_scope(&mut self)  { self.scopes.pop(); }
+
+    fn define_var(&mut self, name: String, ty: HulkType) {
+        if let Some(s) = self.scopes.last_mut() { s.insert(name, ty); }
+    }
+
+    fn lookup_var(&self, name: &str) -> Option<HulkType> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(t) = scope.get(name) { return Some(t.clone()); }
+        }
+        None
+    }
+
+    // ========================================================================
+    // Helpers de tipos
+    // ========================================================================
+
+    /// Devuelve el tipo de una expresión ya anotada.
+    fn type_of(&self, expr: &Expr) -> HulkType {
+        match expr {
+            Expr::Literal(n) => match &n.value {
+                Literal::Number(_) => HulkType::Number,
+                Literal::Bool(_)   => HulkType::Bool,
+                Literal::Str(_)    => HulkType::String,
+                Literal::Id(name)  => self.lookup_var(name)
+                    .unwrap_or(HulkType::Unknown),
+            },
+            Expr::SelfRef        => self.self_type.as_ref()
+                .map(|n| HulkType::Class(n.clone()))
+                .unwrap_or(HulkType::Unknown),
+            Expr::Binary(n)        => n.return_type.clone(),
+            Expr::Unary(n)         => n.return_type.clone(),
+            Expr::Let(n)           => n.return_type.clone(),
+            Expr::If(n)            => n.return_type.clone(),
+            Expr::While(n)         => n.return_type.clone(),
+            Expr::For(n)           => n.return_type.clone(),
+            Expr::Block(n)         => n.return_type.clone(),
+            Expr::FunCall(n)       => n.return_type.clone(),
+            Expr::Instantiation(n) => n.return_type.clone(),
+            Expr::DestAssign(n)    => n.return_type.clone(),
+            Expr::MemberAccess(n)  => n.return_type.clone(),
+            Expr::MethodCall(n)    => n.return_type.clone(),
+            Expr::BaseCall(_)      => HulkType::Unknown,
+            Expr::TypeDowncast(n) => n.return_type.clone(),
+            Expr::TypeTest(n) => n.return_type.clone(),
+        }
+    }
+
+    /// Convierte un `InferType` (del entorno del inferidor) a `HulkType`.
+    fn resolve_infer(&self, t: &InferType) -> HulkType {
+        match t {
+            InferType::Concrete(h) => h.clone(),
+            InferType::Var(_)      => HulkType::Unknown,
+        }
+    }
+
+    /// `true` si `sub` conforma a `sup` (delegado al entorno del inferidor).
+    fn conforms(&self, sub: &HulkType, sup: &HulkType) -> bool {
+        self.env.conforms_concrete(sub, sup)
+    }
+
+    /// Emite un error si `actual` no es exactamente `expected`.
+    fn expect_type(&mut self, actual: &HulkType, expected: &HulkType, ctx: &str) {
+        if actual != &HulkType::Unknown && actual != expected {
+            self.errors.push(format!(
+                "Error de tipo en {}: se esperaba {:?} pero se obtuvo {:?}.",
+                ctx, expected, actual
+            ));
+        }
+    }
+
+    /// Emite un error si `actual` no conforma a `expected`.
+    fn expect_conforms(&mut self, actual: &HulkType, expected: &HulkType, ctx: &str) {
+        if actual != &HulkType::Unknown && !self.conforms(actual, expected) {
+            self.errors.push(format!(
+                "Error de tipo en {}: {:?} no conforma a {:?}.",
+                ctx, actual, expected
+            ));
+        }
+    }
+}
+</file>
+
+<file path="type_inferrer.rs">
+//! # Inferidor de tipos para HULK — enfoque por restricciones + worklist
+//!
+//! ## Responsabilidad
+//!
+//! Este módulo **solo infiere tipos**: recorre el AST, genera restricciones,
+//! las resuelve por unificación y anota cada nodo con el `HulkType` concreto
+//! aprendido.  **No emite errores semánticos** (eso es responsabilidad de
+//! `SemanticChecker`).  Solo registra errores estructurales irrecuperables que
+//! impiden continuar la inferencia (e.g. función no declarada al momento de
+//! generar restricciones).
+//!
+//! ## Etapas
+//!
+//! 1. **Registro de declaraciones** — firma estática de tipos y funciones.
+//! 2. **Generación de restricciones** — recorrido bottom-up del AST.
+//! 3. **Resolución iterativa** — worklist + unificación hasta punto fijo.
+//! 4. **Anotación del AST** — sustituir `TypeVar` por el tipo concreto inferido.
+
+use std::collections::{HashMap, VecDeque};
+
+use crate::{
+    expr_visitor::ExprVisitor,
+    nodes::{
+        binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::{Expr, HulkType}, for_node::ForNode, funcall_node::FunCallNode, function_decl_node::FunctionDecl, if_node::IfNode, let_node::LetNode, literal_node::Literal, member_access_node::{MemberAccessNode, MethodCallNode}, program_node::{Program, Statement}, type_decl_node::TypeDeclNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode
+    },
+};
+
+// ============================================================================
+// Tipo interno del inferidor
+// ============================================================================
+
+/// Tipo interno usado durante la inferencia.
+/// Las posiciones sin anotar se representan con `InferType::Var(id)`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InferType {
+    /// Tipo primitivo o de clase concreto.
+    Concrete(HulkType),
+    /// Variable de tipo fresca: representa un tipo aún desconocido.
+    Var(u32),
+}
+
+impl InferType {
+    pub fn number() -> Self { InferType::Concrete(HulkType::Number) }
+    pub fn bool_t() -> Self { InferType::Concrete(HulkType::Bool) }
+    pub fn string() -> Self { InferType::Concrete(HulkType::String) }
+    pub fn class(name: &str) -> Self { InferType::Concrete(HulkType::Class(name.to_string())) }
+    pub fn unknown() -> Self { InferType::Concrete(HulkType::Unknown) }
+
+    fn from_hulk(h: &HulkType) -> Self {
+        match h {
+            HulkType::Unknown => InferType::Concrete(HulkType::Unknown),
+            other => InferType::Concrete(other.clone()),
+        }
+    }
+
+    pub fn is_var(&self) -> bool { matches!(self, InferType::Var(_)) }
+}
+
+// ============================================================================
+// Restricciones
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub enum Constraint {
+    /// Los dos tipos deben ser iguales (unificación exacta).
+    Eq(InferType, InferType),
+    /// `lhs` debe conformar (ser subtipo) de `rhs`.
+    Conform(InferType, InferType),
+}
+
+// ============================================================================
+// Sustitución (union-find plano)
+// ============================================================================
+
+#[derive(Default, Debug)]
+pub struct Substitution {
+    map: HashMap<u32, InferType>,
+}
+
+impl Substitution {
+    /// Sigue la cadena de sustituciones hasta un tipo no-Var o Var sin mapeo.
+    pub fn apply(&self, t: &InferType) -> InferType {
+        match t {
+            InferType::Var(id) => match self.map.get(id) {
+                Some(t2) if t2 != t => self.apply(t2),
+                _ => t.clone(),
+            },
+            other => other.clone(),
+        }
+    }
+
+    /// Registra `var → ty`.  No pisa un binding concreto existente.
+    pub fn bind(&mut self, var: u32, ty: InferType) -> bool {
+        if InferType::Var(var) == ty { return false; }
+        if let Some(existing) = self.map.get(&var) {
+            if !existing.is_var() { return false; }
+        }
+        self.map.insert(var, ty);
+        true
+    }
+
+    pub fn apply_to_constraint(&self, c: &Constraint) -> Constraint {
+        match c {
+            Constraint::Eq(a, b)     => Constraint::Eq(self.apply(a), self.apply(b)),
+            Constraint::Conform(a, b) => Constraint::Conform(self.apply(a), self.apply(b)),
+        }
+    }
+}
+
+// ============================================================================
+// Información semántica compartida con el checker
+// ============================================================================
+
+#[derive(Clone, Debug)]
+pub struct FieldInfo {
+    pub name: String,
+    pub infer_type: InferType,
+}
+
+#[derive(Clone, Debug)]
+pub struct MethodInfo {
+    pub name: String,
+    pub param_types: Vec<InferType>,
+    pub return_type: InferType,
+}
+
+#[derive(Clone, Debug)]
+pub struct TypeInfo {
+    pub name: String,
+    pub params: Vec<InferType>,
+    pub fields: Vec<FieldInfo>,
+    pub methods: Vec<MethodInfo>,
+    pub parent: Option<String>,
+}
+
+// ============================================================================
+// Entorno
+// ============================================================================
+
+pub struct Environment {
+    scopes: Vec<HashMap<String, InferType>>,
+    pub functions: HashMap<String, (Vec<InferType>, InferType)>,
+    pub types: HashMap<String, TypeInfo>,
+    pub self_type: Option<String>,
+    pub current_method: Option<String>,
+}
+
+impl Environment {
+    pub fn new() -> Self {
+        let mut env = Self {
+            scopes: vec![HashMap::new()],
+            functions: HashMap::new(),
+            types: HashMap::new(),
+            self_type: None,
+            current_method: None,
+        };
+        env.register_builtins();
+        env
+    }
+
+    fn register_builtins(&mut self) {
+        let num = || InferType::number();
+        let unk = || InferType::unknown();
+        self.functions.insert("print".into(), (vec![unk()], unk()));
+        self.functions.insert("sqrt".into(),  (vec![num()], num()));
+        self.functions.insert("sin".into(),   (vec![num()], num()));
+        self.functions.insert("cos".into(),   (vec![num()], num()));
+        self.functions.insert("exp".into(),   (vec![num()], num()));
+        self.functions.insert("log".into(),   (vec![num(), num()], num()));
+        self.functions.insert("rand".into(),  (vec![], num()));
+        self.functions.insert("range".into(), (vec![num(), num()], num()));
+    }
+
+    pub fn push_scope(&mut self) { self.scopes.push(HashMap::new()); }
+    pub fn pop_scope(&mut self)  { self.scopes.pop(); }
+
+    pub fn define(&mut self, name: String, t: InferType) {
+        if let Some(s) = self.scopes.last_mut() { s.insert(name, t); }
+    }
+
+    pub fn lookup(&self, name: &str) -> Option<&InferType> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(t) = scope.get(name) { return Some(t); }
+        }
+        None
+    }
+
+    pub fn assign(&mut self, name: &str, t: InferType) -> bool {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.contains_key(name) {
+                scope.insert(name.to_string(), t);
+                return true;
+            }
+        }
+        false
+    }
+
+    // ------------------------------------------------------------------
+    // Relación de conformidad (subtipado)
+    // ------------------------------------------------------------------
+
+    pub fn conforms_concrete(&self, sub: &HulkType, sup: &HulkType) -> bool {
+        if sub == sup { return true; }
+        if matches!(sub, HulkType::Unknown) || matches!(sup, HulkType::Unknown) {
+            return true;
+        }
+        match (sub, sup) {
+            (HulkType::Number, _) | (_, HulkType::Number) => return false,
+            (HulkType::String, _) | (_, HulkType::String) => return false,
+            (HulkType::Bool,   _) | (_, HulkType::Bool)   => return false,
+            _ => {}
+        }
+        if let (HulkType::Class(s), HulkType::Class(p)) = (sub, sup) {
+            return self.is_subtype(s, p);
+        }
+        false
+    }
+
+    pub fn is_subtype(&self, child: &str, ancestor: &str) -> bool {
+        if child == ancestor { return true; }
+        if let Some(info) = self.types.get(child) {
+            if let Some(ref parent) = info.parent {
+                return self.is_subtype(parent, ancestor);
+            }
+        }
+        false
+    }
+
+    /// Ancestro común más bajo de dos tipos concretos.
+    pub fn lca(&self, a: &HulkType, b: &HulkType) -> HulkType {
+        if a == b { return a.clone(); }
+        if matches!(a, HulkType::Unknown) || matches!(b, HulkType::Unknown) {
+            return HulkType::Unknown;
+        }
+        if self.conforms_concrete(a, b) { return b.clone(); }
+        if self.conforms_concrete(b, a) { return a.clone(); }
+        let a_ancs = self.ancestors(a);
+        for anc in self.ancestors(b) {
+            if a_ancs.contains(&anc) { return HulkType::Class(anc); }
+        }
+        HulkType::Unknown
+    }
+
+    fn ancestors(&self, t: &HulkType) -> Vec<String> {
+        let mut res = Vec::new();
+        if let HulkType::Class(name) = t {
+            let mut cur = name.clone();
+            loop {
+                res.push(cur.clone());
+                match self.types.get(&cur).and_then(|i| i.parent.clone()) {
+                    Some(p) => cur = p,
+                    None    => break,
+                }
+            }
+        }
+        res
+    }
+
+    // ------------------------------------------------------------------
+    // Búsqueda de miembros en la jerarquía
+    // ------------------------------------------------------------------
+
+    pub fn lookup_field(&self, type_name: &str, field: &str) -> Option<FieldInfo> {
+        if let Some(ti) = self.types.get(type_name) {
+            for f in &ti.fields {
+                if f.name == field { return Some(f.clone()); }
+            }
+            if let Some(ref p) = ti.parent {
+                return self.lookup_field(p, field);
+            }
+        }
+        None
+    }
+
+    pub fn lookup_method(&self, type_name: &str, method: &str) -> Option<MethodInfo> {
+        if let Some(ti) = self.types.get(type_name) {
+            for m in &ti.methods {
+                if m.name == method { return Some(m.clone()); }
+            }
+            if let Some(ref p) = ti.parent {
+                return self.lookup_method(p, method);
+            }
+        }
+        None
+    }
+
+    pub fn update_method_return(
+        &mut self,
+        type_name: &str,
+        method_name: &str,
+        new_ret: InferType,
+    ) {
+        if let Some(ti) = self.types.get_mut(type_name) {
+            for m in &mut ti.methods {
+                if m.name == method_name { m.return_type = new_ret; return; }
+            }
+        }
+    }
+
+    pub fn update_field(
+        &mut self,
+        type_name: &str,
+        field_name: &str,
+        new_ty: InferType,
+    ) {
+        if let Some(ti) = self.types.get_mut(type_name) {
+            for f in &mut ti.fields {
+                if f.name == field_name { f.infer_type = new_ty; return; }
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Generador de variables de tipo frescas
+// ============================================================================
+
+struct VarGen(u32);
+
+impl VarGen {
+    fn new() -> Self { VarGen(0) }
+
+    fn fresh(&mut self) -> InferType {
+        let id = self.0;
+        self.0 += 1;
+        InferType::Var(id)
+    }
+
+    /// Convierte una anotación del AST: `Unknown` → Var fresca; concreto → Concrete.
+    fn from_annotation(&mut self, h: &HulkType) -> InferType {
+        if *h == HulkType::Unknown { self.fresh() } else { InferType::from_hulk(h) }
+    }
+}
+
+// ============================================================================
+// Inferidor principal
+// ============================================================================
+
+pub struct TypeInferrer {
+    pub env: Environment,
+    var_gen: VarGen,
+    constraints: Vec<Constraint>,
+    pub subst: Substitution,
+    /// Errores estructurales que impiden continuar la inferencia.
+    /// Los errores semánticos (conformidad, tipos incompatibles) se detectan
+    /// en `SemanticChecker`, no aquí.
+    pub inference_errors: Vec<String>,
+    changed: bool,
+}
+
+impl TypeInferrer {
+    pub fn new() -> Self {
+        Self {
+            env: Environment::new(),
+            var_gen: VarGen::new(),
+            constraints: Vec::new(),
+            subst: Substitution::default(),
+            inference_errors: Vec::new(),
+            changed: false,
+        }
+    }
+
+    // ========================================================================
+    // Punto de entrada público
+    // ========================================================================
+
+    /// Ejecuta las cuatro etapas de inferencia y anota el AST.
+    /// Devuelve `true` si no hubo errores estructurales (no semánticos).
+    pub fn infer_program(&mut self, program: &mut Program) -> bool {
+        self.register_declarations(program);
+
+        for stmt in program.statements.iter_mut() {
+            match stmt {
+                Statement::FunctionDecl(decl) => self.gen_function_decl(decl),
+                Statement::TypeDecl(decl)     => self.gen_type_decl(decl),
+                Statement::Expression(expr)   => { expr.accept(self); }
+            }
+        }
+
+        self.solve_constraints();
+
+        for stmt in program.statements.iter_mut() {
+            match stmt {
+                Statement::FunctionDecl(decl) => self.annotate_function_decl(decl),
+                Statement::TypeDecl(decl)     => self.annotate_type_decl(decl),
+                Statement::Expression(expr)   => { self.annotate_expr(expr); }
+            }
+        }
+
+        self.inference_errors.is_empty()
+    }
+
+    // ========================================================================
+    // Etapa 1 — Registro de declaraciones
+    // ========================================================================
+
+    fn register_declarations(&mut self, program: &Program) {
+        for stmt in &program.statements {
+            if let Statement::TypeDecl(decl) = stmt { self.register_type(decl); }
+        }
+        for stmt in &program.statements {
+            if let Statement::FunctionDecl(decl) = stmt { self.register_function(decl); }
+        }
+    }
+
+    fn register_type(&mut self, decl: &TypeDeclNode) {
+        let name = decl.name.value.as_id();
+
+        let params: Vec<InferType> = decl.params.iter()
+            .map(|(_, t)| self.var_gen.from_annotation(t))
+            .collect();
+
+        let fields: Vec<FieldInfo> = decl.attributes.iter()
+            .map(|attr| FieldInfo {
+                name: attr.name.value.as_id(),
+                infer_type: self.var_gen.from_annotation(&attr.type_annotation),
+            })
+            .collect();
+
+        let methods: Vec<MethodInfo> = decl.methods.iter()
+            .map(|m| MethodInfo {
+                name: m.name.value.as_id(),
+                param_types: m.params.iter()
+                    .map(|(_, t)| self.var_gen.from_annotation(t))
+                    .collect(),
+                return_type: self.var_gen.from_annotation(&m.return_type),
+            })
+            .collect();
+
+        let parent = decl.inheritance.as_ref()
+            .map(|inh| inh.parent_name.value.as_id());
+
+        self.env.types.insert(name.clone(), TypeInfo { name, params, fields, methods, parent });
+    }
+
+    fn register_function(&mut self, decl: &FunctionDecl) {
+        let name = decl.name.value.as_id();
+        let params = decl.params.iter()
+            .map(|(_, t)| self.var_gen.from_annotation(t))
+            .collect();
+        let ret = self.var_gen.from_annotation(&decl.return_type);
+        self.env.functions.insert(name, (params, ret));
+    }
+
+    // ========================================================================
+    // Etapa 2 — Generación de restricciones
+    // ========================================================================
+
+    fn gen_function_decl(&mut self, decl: &mut FunctionDecl) {
+        self.env.push_scope();
+
+        let fn_name = decl.name.value.as_id();
+        let (param_vars, ret_var) = self.env.functions.get(&fn_name).cloned()
+            .unwrap_or_else(|| (vec![], self.var_gen.fresh()));
+
+        for ((param_node, _), pvar) in decl.params.iter().zip(param_vars.iter()) {
+            if let Literal::Id(ref name) = param_node.value {
+                self.env.define(name.clone(), pvar.clone());
+            }
+        }
+
+        let body_ty = decl.body.accept(self);
+        self.add_eq(body_ty, ret_var);
+
+        self.env.pop_scope();
+    }
+
+    fn gen_type_decl(&mut self, decl: &mut TypeDeclNode) {
+        let type_name = decl.name.value.as_id();
+        self.env.self_type = Some(type_name.clone());
+
+        // Atributos
+        self.env.push_scope();
+        let ctor_vars: Vec<InferType> = self.env.types.get(&type_name)
+            .map(|ti| ti.params.clone())
+            .unwrap_or_default();
+
+        for ((param_node, _), pvar) in decl.params.iter().zip(ctor_vars.iter()) {
+            if let Literal::Id(ref name) = param_node.value {
+                self.env.define(name.clone(), pvar.clone());
+            }
+        }
+
+        for attr in &mut decl.attributes {
+            let attr_name = attr.name.value.as_id();
+            let field_var = self.env.lookup_field(&type_name, &attr_name)
+                .map(|f| f.infer_type.clone())
+                .unwrap_or_else(|| self.var_gen.fresh());
+
+            let init_ty = attr.initializer.accept(self);
+            self.add_eq(init_ty, field_var);
+        }
+
+        self.env.pop_scope();
+
+        // Métodos
+        for method in &mut decl.methods {
+            let method_name = method.name.value.as_id();
+            self.env.current_method = Some(method_name.clone());
+            self.env.push_scope();
+
+            self.env.define("self".to_string(), InferType::class(&type_name));
+
+            let method_param_vars: Vec<InferType> = self.env
+                .lookup_method(&type_name, &method_name)
+                .map(|mi| mi.param_types.clone())
+                .unwrap_or_default();
+
+            for ((param_node, _), pvar) in method.params.iter().zip(method_param_vars.iter()) {
+                if let Literal::Id(ref name) = param_node.value {
+                    self.env.define(name.clone(), pvar.clone());
+                }
+            }
+
+            let ret_var = self.env.lookup_method(&type_name, &method_name)
+                .map(|mi| mi.return_type.clone())
+                .unwrap_or_else(|| self.var_gen.fresh());
+
+            let body_ty = method.body.accept(self);
+            self.add_eq(body_ty, ret_var);
+
+            self.env.pop_scope();
+            self.env.current_method = None;
+        }
+
+        self.env.self_type = None;
+    }
+
+    // ========================================================================
+    // Helpers de restricciones
+    // ========================================================================
+
+    fn add_eq(&mut self, a: InferType, b: InferType) {
+        self.constraints.push(Constraint::Eq(a, b));
+    }
+
+    fn add_conform(&mut self, sub: InferType, sup: InferType) {
+        self.constraints.push(Constraint::Conform(sub, sup));
+    }
+
+    // ========================================================================
+    // Etapa 3 — Resolución iterativa (worklist + unificación)
+    // ========================================================================
+
+    fn solve_constraints(&mut self) {
+        let all: Vec<Constraint> = self.constraints.drain(..).collect();
+        let mut worklist: VecDeque<Constraint> = all.into();
+        let mut stalled_count = 0usize;
+
+        while let Some(raw) = worklist.pop_front() {
+            let c = self.subst.apply_to_constraint(&raw);
+            self.changed = false;
+
+            if let Some(pending) = self.process_constraint(c) {
+                worklist.push_back(pending);
+                stalled_count += 1;
+                if stalled_count > worklist.len() + 1 {
+                    // Punto fijo: las restricciones restantes son irresolubles
+                    // (las Conform con Vars sin resolver se descartan silenciosamente;
+                    //  el checker detectará Unknown en el AST anotado si es relevante)
+                    break;
+                }
+            } else if self.changed {
+                stalled_count = 0;
+            }
+        }
+    }
+
+    /// Procesa una restricción.
+    /// - `None`  → resuelta (o descartada).
+    /// - `Some` → no se pudo resolver todavía; re-encolar.
+    ///
+    /// **No emite errores semánticos** — los conflictos de tipo se dejan pasar
+    /// para que el `SemanticChecker` los detecte sobre el AST anotado.
+    fn process_constraint(&mut self, c: Constraint) -> Option<Constraint> {
+        match c {
+            Constraint::Eq(a, b) => {
+                let a = self.subst.apply(&a);
+                let b = self.subst.apply(&b);
+
+                match (&a, &b) {
+                    (x, y) if x == y => None,
+
+                    (InferType::Var(id), other) | (other, InferType::Var(id)) => {
+                        let id = *id;
+                        let other = other.clone();
+                        let bound = self.subst.bind(id, other);
+                        if bound { self.changed = true; }
+                        None
+                    }
+
+                    // Concreto ≡ Concreto: intentar reconciliación por LCA.
+                    // Los conflictos reales los detecta el SemanticChecker.
+                    (InferType::Concrete(_), InferType::Concrete(_)) => None,
+                }
+            }
+
+            Constraint::Conform(sub, sup) => {
+                let sub = self.subst.apply(&sub);
+                let sup = self.subst.apply(&sup);
+
+                match (&sub, &sup) {
+                    // Ambos concretos: verificación diferida al SemanticChecker.
+                    (InferType::Concrete(_), InferType::Concrete(_)) => None,
+                    // Alguno es Var: re-encolar hasta resolver.
+                    _ => Some(Constraint::Conform(sub, sup)),
+                }
+            }
+        }
+    }
+
+    // ========================================================================
+    // Etapa 4 — Anotación del AST
+    // ========================================================================
+
+    pub fn resolve(&self, t: &InferType) -> HulkType {
+        match self.subst.apply(t) {
+            InferType::Concrete(h) => h,
+            InferType::Var(_)      => HulkType::Unknown,
+        }
+    }
+
+    fn annotate_function_decl(&mut self, decl: &mut FunctionDecl) {
+        let fn_name = decl.name.value.as_id();
+
+        if let Some((_, ret_var)) = self.env.functions.get(&fn_name).cloned() {
+            decl.return_type = self.resolve(&ret_var);
+        }
+
+        self.env.push_scope();
+        if let Some((param_vars, _)) = self.env.functions.get(&fn_name).cloned() {
+            for ((param_node, param_ty), pvar) in
+                decl.params.iter_mut().zip(param_vars.iter())
+            {
+                let resolved = self.resolve(pvar);
+                *param_ty = resolved.clone();
+                if let Literal::Id(ref name) = param_node.value {
+                    self.env.define(name.clone(), InferType::Concrete(resolved));
+                }
+            }
+        }
+
+        self.annotate_expr(&mut decl.body);
+        self.env.pop_scope();
+    }
+
+    fn annotate_type_decl(&mut self, decl: &mut TypeDeclNode) {
+        let type_name = decl.name.value.as_id();
+
+        let ctor_vars: Vec<InferType> = self.env.types.get(&type_name)
+            .map(|ti| ti.params.clone())
+            .unwrap_or_default();
+
+        for ((_, param_ty), pvar) in decl.params.iter_mut().zip(ctor_vars.iter()) {
+            *param_ty = self.resolve(pvar);
+        }
+
+        // Atributos
+        self.env.push_scope();
+        let resolved_ctor: Vec<(String, HulkType)> = decl.params.iter()
+            .map(|(n, t)| (n.value.as_id(), t.clone()))
+            .collect();
+        for (name, ty) in &resolved_ctor {
+            self.env.define(name.clone(), InferType::Concrete(ty.clone()));
+        }
+
+        for attr in &mut decl.attributes {
+            let attr_name = attr.name.value.as_id();
+            if let Some(field) = self.env.lookup_field(&type_name, &attr_name) {
+                let resolved = self.resolve(&field.infer_type);
+                attr.type_annotation = resolved.clone();
+                self.env.update_field(&type_name, &attr_name, InferType::Concrete(resolved));
+            }
+            self.annotate_expr(&mut attr.initializer);
+        }
+        self.env.pop_scope();
+
+        // Métodos
+        self.env.self_type = Some(type_name.clone());
+
+        for method in &mut decl.methods {
+            let method_name = method.name.value.as_id();
+
+            let (resolved_ret, resolved_params): (HulkType, Vec<HulkType>) =
+                if let Some(mi) = self.env.lookup_method(&type_name, &method_name) {
+                    let ret = self.resolve(&mi.return_type);
+                    let params: Vec<HulkType> = mi.param_types.iter()
+                        .map(|p| self.resolve(p))
+                        .collect();
+                    (ret, params)
+                } else {
+                    (HulkType::Unknown, vec![])
+                };
+
+            method.return_type = resolved_ret.clone();
+            self.env.update_method_return(
+                &type_name,
+                &method_name,
+                InferType::Concrete(resolved_ret),
+            );
+            for ((_, param_ty), resolved) in
+                method.params.iter_mut().zip(resolved_params.iter())
+            {
+                *param_ty = resolved.clone();
+            }
+
+            self.env.push_scope();
+            self.env.define(
+                "self".to_string(),
+                InferType::Concrete(HulkType::Class(type_name.clone())),
+            );
+            for ((param_node, param_ty), _) in
+                method.params.iter().zip(resolved_params.iter())
+            {
+                if let Literal::Id(ref name) = param_node.value {
+                    self.env.define(name.clone(), InferType::Concrete(param_ty.clone()));
+                }
+            }
+            self.env.current_method = Some(method_name.clone());
+
+            self.annotate_expr(&mut method.body);
+
+            self.env.pop_scope();
+            self.env.current_method = None;
+        }
+
+        self.env.self_type = None;
+    }
+
+    /// Anotación recursiva: resuelve TypeVars y setea `return_type` en cada nodo.
+    fn annotate_expr(&mut self, expr: &mut Expr) {
+        match expr {
+            Expr::Literal(_) | Expr::SelfRef => {}
+            Expr::Binary(node) => {
+                self.annotate_expr(&mut node.left);
+                self.annotate_expr(&mut node.right);
+                node.return_type = self.infer_binary_type(&node.op);
+            }
+            Expr::Unary(node) => {
+                self.annotate_expr(&mut node.expr);
+                node.return_type = match node.op {
+                    UnaryOp::Not              => HulkType::Bool,
+                    UnaryOp::Neg | UnaryOp::Plus => HulkType::Number,
+                };
+            }
+            Expr::Let(node) => {
+                let mut scopes_opened = 0usize;
+
+                for ((id_node, var_ty), init_expr) in &mut node.assignments {
+                    self.annotate_expr(init_expr);
+
+                    let resolved_ty = if *var_ty != HulkType::Unknown {
+                        var_ty.clone()
+                    } else {
+                        self.type_of_expr(init_expr)
+                    };
+                    *var_ty = resolved_ty.clone();
+
+                    self.env.push_scope();
+                    scopes_opened += 1;
+                    if let Literal::Id(ref name) = id_node.value {
+                        self.env.define(name.clone(), InferType::Concrete(resolved_ty));
+                    }
+                }
+
+                self.annotate_expr(&mut node.body);
+                node.return_type = self.type_of_expr(&node.body);
+
+                for _ in 0..scopes_opened { self.env.pop_scope(); }
+            }
+            Expr::If(node) => {
+                self.annotate_expr(&mut node.condition);
+                self.annotate_expr(&mut node.if_branch);
+                let mut branch_ty = self.type_of_expr(&node.if_branch);
+                for (cond, body) in &mut node.elif_branches {
+                    self.annotate_expr(cond);
+                    self.annotate_expr(body);
+                    branch_ty = self.env.lca(&branch_ty, &self.type_of_expr(body));
+                }
+                self.annotate_expr(&mut node.else_branch);
+                let else_ty = self.type_of_expr(&node.else_branch);
+                node.return_type = self.env.lca(&branch_ty, &else_ty);
+            }
+            Expr::While(node) => {
+                self.annotate_expr(&mut node.condition);
+                self.annotate_expr(&mut node.body);
+                node.return_type = self.type_of_expr(&node.body);
+            }
+            Expr::For(node) => {
+                self.annotate_expr(&mut node.iterator);
+                self.env.push_scope();
+                if let Literal::Id(ref var_name) = node.variable.value.clone() {
+                    self.env.define(var_name.clone(), InferType::Concrete(HulkType::Number));
+                }
+                self.annotate_expr(&mut node.body);
+                node.return_type = self.type_of_expr(&node.body);
+                self.env.pop_scope();
+            }
+            Expr::Block(node) => {
+                for e in &mut node.expressions { self.annotate_expr(e); }
+                node.return_type = node.expressions.last()
+                    .map(|e| self.type_of_expr(e))
+                    .unwrap_or(HulkType::Unknown);
+            }
+            Expr::FunCall(node) => {
+                for arg in &mut node.args { self.annotate_expr(arg); }
+                if node.name.value.as_id() == "print" {
+                    node.return_type = self.type_of_expr(&node.args[0]);
+                } else {
+                    let fn_name = node.name.value.as_id();
+                    node.return_type = self.env.functions.get(&fn_name)
+                        .map(|(_, ret)| self.resolve(ret))
+                        .unwrap_or(HulkType::Unknown);
+                }
+            }
+            Expr::Instantiation(node) => {
+                for arg in &mut node.args { self.annotate_expr(arg); }
+                let type_name = node.name.value.as_id();
+                node.return_type = HulkType::Class(type_name);
+            }
+            Expr::DestAssign(node) => {
+                self.annotate_expr(&mut node.expr);
+                self.annotate_expr(&mut node.target);
+                node.return_type = self.type_of_expr(&node.expr);
+            }
+            Expr::MemberAccess(node) => {
+                self.annotate_expr(&mut node.instance);
+                let inst_ty = self.type_of_expr(&node.instance);
+                let result = if let HulkType::Class(ref tn) = inst_ty {
+                    if let Literal::Id(ref field_name) = node.member.value {
+                        self.env.lookup_field(tn, field_name)
+                            .map(|f| self.resolve(&f.infer_type))
+                            .unwrap_or(HulkType::Unknown)
+                    } else { HulkType::Unknown }
+                } else { HulkType::Unknown };
+                node.set_type(result);
+            }
+            Expr::MethodCall(node) => {
+                self.annotate_expr(&mut node.instance);
+                for arg in &mut node.call.args { self.annotate_expr(arg); }
+                let inst_ty = self.type_of_expr(&node.instance);
+                let result = if let HulkType::Class(ref tn) = inst_ty {
+                    let method_name = node.call.name.value.as_id();
+                    self.env.lookup_method(tn, &method_name)
+                        .map(|mi| self.resolve(&mi.return_type))
+                        .unwrap_or(HulkType::Unknown)
+                } else { HulkType::Unknown };
+                node.call.return_type = result.clone();
+                node.set_type(result);
+            }
+            Expr::BaseCall(args) => {
+                for arg in args.iter_mut() { self.annotate_expr(arg); }
+            }
+            Expr::TypeDowncast(node) => {
+                self.annotate_expr(&mut node.expr);
+                let target_name = node.target_type.value.as_id();
+                node.return_type = HulkType::Class(target_name);
+            }
+            Expr::TypeTest(node) => {
+                self.annotate_expr(&mut node.expr);
+                node.return_type = HulkType::Bool;
+            }
+        }
+    }
+
+    /// Devuelve el tipo concreto de una expresión ya anotada.
+    pub fn type_of_expr(&self, expr: &Expr) -> HulkType {
+        match expr {
+            Expr::Literal(n) => match &n.value {
+                Literal::Number(_) => HulkType::Number,
+                Literal::Bool(_)   => HulkType::Bool,
+                Literal::Str(_)    => HulkType::String,
+                Literal::Id(name)  => self.env.lookup(name)
+                    .map(|t| self.resolve(t))
+                    .unwrap_or(HulkType::Unknown),
+            },
+            Expr::SelfRef        => self.env.self_type.as_ref()
+                .map(|n| HulkType::Class(n.clone()))
+                .unwrap_or(HulkType::Unknown),
+            Expr::Binary(n)        => n.return_type.clone(),
+            Expr::Unary(n)         => n.return_type.clone(),
+            Expr::Let(n)           => n.return_type.clone(),
+            Expr::If(n)            => n.return_type.clone(),
+            Expr::While(n)         => n.return_type.clone(),
+            Expr::For(n)           => n.return_type.clone(),
+            Expr::Block(n)         => n.return_type.clone(),
+            Expr::FunCall(n)       => n.return_type.clone(),
+            Expr::Instantiation(n) => n.return_type.clone(),
+            Expr::DestAssign(n)    => n.return_type.clone(),
+            Expr::MemberAccess(n)  => n.return_type.clone(),
+            Expr::MethodCall(n)    => n.return_type.clone(),
+            Expr::BaseCall(_)      => HulkType::Unknown,
+            Expr::TypeDowncast(n) => n.return_type.clone(),
+            Expr::TypeTest(n) => n.return_type.clone(),
+        }
+    }
+
+    fn infer_binary_type(&self, op: &BinaryOp) -> HulkType {
+        match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul
+            | BinaryOp::Div | BinaryOp::Mod | BinaryOp::Pow => HulkType::Number,
+            BinaryOp::Equal | BinaryOp::Dist
+            | BinaryOp::Great | BinaryOp::Less
+            | BinaryOp::Gequa | BinaryOp::Lequa
+            | BinaryOp::And | BinaryOp::Or => HulkType::Bool,
+            BinaryOp::SingleConc | BinaryOp::SpacedConc => HulkType::String,
+        }
+    }
+}
+
+// ============================================================================
+// ExprVisitor — generación de restricciones (Etapa 2)
+// ============================================================================
+
+impl ExprVisitor<InferType> for TypeInferrer {
+
+    fn visit_number(&mut self, _n: f32) -> InferType { InferType::number() }
+    fn visit_bool(&mut self, _b: bool) -> InferType  { InferType::bool_t() }
+    fn visit_string(&mut self, _s: &str) -> InferType { InferType::string() }
+
+    fn visit_id(&mut self, id: &str) -> InferType {
+        match self.env.lookup(id) {
+            Some(t) => t.clone(),
+            None    => self.var_gen.fresh(),
+        }
+    }
+
+    fn visit_self(&mut self) -> InferType {
+        match &self.env.self_type {
+            Some(name) => InferType::class(name),
+            // No emitir error aquí; el SemanticChecker lo detectará
+            None => self.var_gen.fresh(),
+        }
+    }
+
+    fn visit_binary_op(
+        &mut self,
+        left: &mut Expr,
+        op: &BinaryOp,
+        right: &mut Expr,
+    ) -> InferType {
+        let lt = left.accept(self);
+        let rt = right.accept(self);
+
+        match op {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul
+            | BinaryOp::Div | BinaryOp::Mod | BinaryOp::Pow => {
+                self.add_eq(lt, InferType::number());
+                self.add_eq(rt, InferType::number());
+                InferType::number()
+            }
+            BinaryOp::Great | BinaryOp::Less
+            | BinaryOp::Gequa | BinaryOp::Lequa => {
+                self.add_eq(lt, InferType::number());
+                self.add_eq(rt, InferType::number());
+                InferType::bool_t()
+            }
+            BinaryOp::Equal | BinaryOp::Dist => {
+                self.add_eq(lt, rt);
+                InferType::bool_t()
+            }
+            BinaryOp::And | BinaryOp::Or => {
+                self.add_eq(lt, InferType::bool_t());
+                self.add_eq(rt, InferType::bool_t());
+                InferType::bool_t()
+            }
+            BinaryOp::SingleConc | BinaryOp::SpacedConc => {
+                self.add_conform(lt, InferType::string());
+                self.add_conform(rt, InferType::string());
+                InferType::string()
+            }
+        }
+    }
+
+    fn visit_unary_op(&mut self, op: &UnaryOp, expr: &mut Expr) -> InferType {
+        let t = expr.accept(self);
+        match op {
+            UnaryOp::Not => {
+                self.add_eq(t, InferType::bool_t());
+                InferType::bool_t()
+            }
+            UnaryOp::Neg | UnaryOp::Plus => {
+                self.add_eq(t, InferType::number());
+                InferType::number()
+            }
+        }
+    }
+
+    fn visit_let(&mut self, node: &mut LetNode) -> InferType {
+        let mut scopes = 0usize;
+
+        for ((id_node, decl_ty), init_expr) in &mut node.assignments {
+            let init_infer = init_expr.accept(self);
+
+            let var_ty: InferType = if *decl_ty != HulkType::Unknown {
+                let annotated = InferType::from_hulk(decl_ty);
+                self.add_conform(init_infer, annotated.clone());
+                annotated
+            } else {
+                let fresh = self.var_gen.fresh();
+                self.add_eq(fresh.clone(), init_infer);
+                fresh
+            };
+
+            self.env.push_scope();
+            scopes += 1;
+            if let Literal::Id(ref name) = id_node.value {
+                self.env.define(name.clone(), var_ty);
+            }
+        }
+
+        let body_ty = node.body.accept(self);
+        for _ in 0..scopes { self.env.pop_scope(); }
+        body_ty
+    }
+
+    fn visit_if(&mut self, node: &mut IfNode) -> InferType {
+        let cond_t = node.condition.accept(self);
+        self.add_eq(cond_t, InferType::bool_t());
+
+        let mut branch_vars: Vec<InferType> = vec![node.if_branch.accept(self)];
+
+        for (elif_cond, elif_body) in &mut node.elif_branches {
+            let ec = elif_cond.accept(self);
+            self.add_eq(ec, InferType::bool_t());
+            branch_vars.push(elif_body.accept(self));
+        }
+
+        branch_vars.push(node.else_branch.accept(self));
+
+        let result_var = self.var_gen.fresh();
+        for bv in branch_vars {
+            self.add_conform(bv.clone(), result_var.clone());
+            self.add_conform(result_var.clone(), bv);
+        }
+
+        result_var
+    }
+
+    fn visit_while(&mut self, node: &mut WhileNode) -> InferType {
+        let cond_t = node.condition.accept(self);
+        self.add_eq(cond_t, InferType::bool_t());
+        node.body.accept(self)
+    }
+
+    fn visit_for(&mut self, node: &mut ForNode) -> InferType {
+        node.iterator.accept(self);
+        self.env.push_scope();
+        if let Literal::Id(ref var_name) = node.variable.value {
+            self.env.define(var_name.clone(), InferType::number());
+        }
+        let body_t = node.body.accept(self);
+        self.env.pop_scope();
+        body_t
+    }
+
+    fn visit_fun_call(&mut self, node: &mut FunCallNode) -> InferType {
+        let arg_tys: Vec<InferType> = node.args.iter_mut()
+            .map(|a| a.accept(self))
+            .collect();
+
+        if let Literal::Id(ref name) = node.name.value.clone() {
+            match self.env.functions.get(name).cloned() {
+                Some((param_tys, ret_ty)) => {
+                    let variadic = param_tys.len() == 1
+                        && param_tys[0] == InferType::unknown();
+
+                    if !variadic && param_tys.len() == arg_tys.len() {
+                        for (arg_ty, param_ty) in arg_tys.into_iter().zip(param_tys) {
+                            self.add_eq(arg_ty, param_ty);
+                        }
+                    }
+                    // Aridad incorrecta y función no declarada: el checker lo reporta.
+                    ret_ty
+                }
+                None => self.var_gen.fresh(),
+            }
+        } else {
+            self.var_gen.fresh()
+        }
+    }
+
+    fn visit_dest_assign(&mut self, node: &mut DestAssignNode) -> InferType {
+        let expr_ty = node.expr.accept(self);
+
+        match node.target.as_mut() {
+            Expr::Literal(lit) => {
+                if let Literal::Id(ref name) = lit.value.clone() {
+                    if let Some(existing_ty) = self.env.lookup(name).cloned() {
+                        self.add_conform(expr_ty.clone(), existing_ty);
+                    }
+                    // Variable no declarada: el checker lo detecta
+                }
+            }
+            Expr::MemberAccess(ma) => {
+                let inst_ty = ma.instance.accept(self);
+                if let InferType::Concrete(HulkType::Class(ref tn)) = inst_ty.clone() {
+                    if let Literal::Id(ref fn_name) = ma.member.value.clone() {
+                        if let Some(fi) = self.env.lookup_field(tn, fn_name) {
+                            self.add_conform(expr_ty.clone(), fi.infer_type);
+                        }
+                    }
+                }
+                ma.set_type(
+                    if let InferType::Concrete(h) = inst_ty { h }
+                    else { HulkType::Unknown }
+                );
+            }
+            _ => {} // target inválido: el checker lo detecta
+        }
+
+        node.return_type = HulkType::Unknown;
+        expr_ty
+    }
+
+    fn visit_block(&mut self, node: &mut BlockNode) -> InferType {
+        let mut last = InferType::unknown();
+        for e in &mut node.expressions { last = e.accept(self); }
+        last
+    }
+
+    fn visit_instantiation(&mut self, node: &mut FunCallNode) -> InferType {
+        let arg_tys: Vec<InferType> = node.args.iter_mut()
+            .map(|a| a.accept(self))
+            .collect();
+
+        if let Literal::Id(ref type_name) = node.name.value.clone() {
+            match self.env.types.get(type_name).cloned() {
+                Some(ti) => {
+                    let effective_params: Vec<InferType> = if ti.params.is_empty() {
+                        ti.parent.as_ref()
+                            .and_then(|p| self.env.types.get(p))
+                            .map(|pt| pt.params.clone())
+                            .unwrap_or_default()
+                    } else {
+                        ti.params.clone()
+                    };
+
+                    if arg_tys.len() == effective_params.len() {
+                        for (arg_ty, param_ty) in arg_tys.into_iter().zip(effective_params) {
+                            self.add_conform(arg_ty.clone(), param_ty.clone());
+                            self.add_eq(param_ty, arg_ty);
+                        }
+                    }
+                    // Aridad incorrecta: el checker lo detecta
+                    InferType::class(type_name)
+                }
+                None => self.var_gen.fresh(),
+            }
+        } else {
+            self.var_gen.fresh()
+        }
+    }
+
+    fn visit_member_access(&mut self, node: &mut MemberAccessNode) -> InferType {
+        let inst_ty = node.instance.accept(self);
+
+        let result = if let InferType::Concrete(HulkType::Class(ref tn)) = inst_ty {
+            if let Literal::Id(ref field_name) = node.member.value {
+                match self.env.lookup_field(tn, field_name) {
+                    Some(fi) => fi.infer_type,
+                    None     => self.var_gen.fresh(),
+                }
+            } else { self.var_gen.fresh() }
+        } else if inst_ty == InferType::unknown() {
+            self.var_gen.fresh()
+        } else {
+            self.var_gen.fresh()
+        };
+
+        if let InferType::Concrete(h) = &inst_ty { node.set_type(h.clone()); }
+        result
+    }
+
+    fn visit_method_call(&mut self, node: &mut MethodCallNode) -> InferType {
+        let inst_ty = node.instance.accept(self);
+
+        let arg_tys: Vec<InferType> = node.call.args.iter_mut()
+            .map(|a| a.accept(self))
+            .collect();
+
+        let result = if let InferType::Concrete(HulkType::Class(ref tn)) = inst_ty {
+            let method_name = node.call.name.value.as_id();
+            match self.env.lookup_method(tn, &method_name) {
+                Some(mi) => {
+                    if mi.param_types.len() == arg_tys.len() {
+                        for (arg_ty, param_ty) in arg_tys.into_iter().zip(mi.param_types) {
+                            self.add_conform(arg_ty, param_ty);
+                        }
+                    }
+                    mi.return_type
+                }
+                None => self.var_gen.fresh(),
+            }
+        } else {
+            self.var_gen.fresh()
+        };
+
+        result
+    }
+
+    fn visit_base_call(&mut self, args: &mut [Expr]) -> InferType {
+        for arg in args.iter_mut() { arg.accept(self); }
+
+        let self_type = match &self.env.self_type {
+            Some(t) => t.clone(),
+            None    => return self.var_gen.fresh(),
+        };
+        let method_name = match &self.env.current_method {
+            Some(m) => m.clone(),
+            None    => return self.var_gen.fresh(),
+        };
+
+        let parent_name = match self.env.types.get(&self_type)
+            .and_then(|ti| ti.parent.clone())
+        {
+            Some(p) => p,
+            None    => return self.var_gen.fresh(),
+        };
+
+        match self.env.lookup_method(&parent_name, &method_name) {
+            Some(mi) => mi.return_type,
+            None     => self.var_gen.fresh(),
+        }
+    }
+    
+    fn visit_type_downcast(&mut self, node: &mut crate::nodes::type_downcast_node::TypeDowncastNode) -> InferType {
+        // Visit sub-expression for constraint generation.
+        node.expr.accept(self);
+ 
+        let target_name = node.target_type.value.as_id();
+        let result_ty = HulkType::Class(target_name.clone());
+ 
+        // Annotate node with the declared target type.
+        node.return_type = result_ty;
+ 
+        InferType::class(&target_name)
+    }
+
+    fn visit_type_test(&mut self, node: &mut TypeTestNode) -> InferType {
+        // Visit sub-expression for constraint generation.
+        node.expr.accept(self);
+ 
+        // Annotate this node and return Bool.
+        node.return_type = HulkType::Bool;
+        InferType::bool_t()
+    }
+}
+</file>
+
+</files>

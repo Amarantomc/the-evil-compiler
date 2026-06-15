@@ -21,21 +21,7 @@ use std::collections::{HashMap, VecDeque};
 use crate::{
     expr_visitor::ExprVisitor,
     nodes::{
-        binaryop_node::BinaryOp,
-        block_node::BlockNode,
-        destassing_node::DestAssignNode,
-        for_node::ForNode,
-        funcall_node::FunCallNode,
-        function_decl_node::FunctionDecl,
-        if_node::IfNode,
-        let_node::LetNode,
-        literal_node::Literal,
-        member_access_node::{MemberAccessNode, MethodCallNode},
-        program_node::{Program, Statement},
-        type_decl_node::TypeDeclNode,
-        expr_node::{Expr, HulkType},
-        unaryop_node::UnaryOp,
-        while_node::WhileNode,
+        binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::{Expr, HulkType}, for_node::ForNode, funcall_node::FunCallNode, function_decl_node::FunctionDecl, if_node::IfNode, let_node::LetNode, literal_node::Literal, member_access_node::{MemberAccessNode, MethodCallNode}, program_node::{Program, Statement}, type_decl_node::TypeDeclNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode
     },
 };
 
@@ -865,8 +851,15 @@ impl TypeInferrer {
             Expr::BaseCall(args) => {
                 for arg in args.iter_mut() { self.annotate_expr(arg); }
             }
-Expr::TypeDowncast(type_downcast_node) => todo!(),
-            Expr::TypeTest(type_test_node) => todo!(),
+            Expr::TypeDowncast(node) => {
+                self.annotate_expr(&mut node.expr);
+                let target_name = node.target_type.value.as_id();
+                node.return_type = HulkType::Class(target_name);
+            }
+            Expr::TypeTest(node) => {
+                self.annotate_expr(&mut node.expr);
+                node.return_type = HulkType::Bool;
+            }
         }
     }
 
@@ -897,8 +890,8 @@ Expr::TypeDowncast(type_downcast_node) => todo!(),
             Expr::MemberAccess(n)  => n.return_type.clone(),
             Expr::MethodCall(n)    => n.return_type.clone(),
             Expr::BaseCall(_)      => HulkType::Unknown,
-            Expr::TypeDowncast(type_downcast_node) => todo!(),
-            Expr::TypeTest(type_test_node) => todo!(),
+            Expr::TypeDowncast(n) => n.return_type.clone(),
+            Expr::TypeTest(n) => n.return_type.clone(),
         }
     }
 
@@ -1232,10 +1225,24 @@ impl ExprVisitor<InferType> for TypeInferrer {
     }
     
     fn visit_type_downcast(&mut self, node: &mut crate::nodes::type_downcast_node::TypeDowncastNode) -> InferType {
-        todo!()
+        // Visit sub-expression for constraint generation.
+        node.expr.accept(self);
+ 
+        let target_name = node.target_type.value.as_id();
+        let result_ty = HulkType::Class(target_name.clone());
+ 
+        // Annotate node with the declared target type.
+        node.return_type = result_ty;
+ 
+        InferType::class(&target_name)
     }
-    
-    fn visit_type_test(&mut self, node: &mut crate::nodes::type_test_node::TypeTestNode) -> InferType {
-        todo!()
+
+    fn visit_type_test(&mut self, node: &mut TypeTestNode) -> InferType {
+        // Visit sub-expression for constraint generation.
+        node.expr.accept(self);
+ 
+        // Annotate this node and return Bool.
+        node.return_type = HulkType::Bool;
+        InferType::bool_t()
     }
 }

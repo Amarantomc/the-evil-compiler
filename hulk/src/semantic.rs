@@ -582,8 +582,79 @@ impl SemanticChecker {
                     ));
                 }
             }
-            Expr::TypeDowncast(type_downcast_node) => todo!(),
-            Expr::TypeTest(type_test_node) => todo!(),
+            Expr::TypeDowncast(node) => {
+                self.check_expr(&node.expr);
+ 
+                let expr_ty = self.type_of(&node.expr);
+                let target_name = node.target_type.value.as_id();
+ 
+                // Rule 1: source must be a class type.
+                match &expr_ty {
+                    HulkType::Class(_) | HulkType::Unknown => {}
+                    other => {
+                        self.errors.push(format!(
+                            "Error semántico: el operador 'as' no puede aplicarse a tipo primitivo {:?}.",
+                            other
+                        ));
+                        return; // no further checks make sense
+                    }
+                }
+ 
+                // Rule 2: target type must exist.
+                if !self.env.types.contains_key(&target_name) {
+                    self.errors.push(format!(
+                        "Error semántico: el tipo '{}' usado en 'as' no está declarado.",
+                        target_name
+                    ));
+                    return;
+                }
+ 
+                // Rule 3: source and target must be related (one is an
+                // ancestor of the other).
+                if let HulkType::Class(ref source_name) = expr_ty {
+                    let source_is_ancestor_of_target =
+                        self.env.is_subtype(&target_name, source_name);
+                    let target_is_ancestor_of_source =
+                        self.env.is_subtype(source_name, &target_name);
+ 
+                    if !source_is_ancestor_of_target && !target_is_ancestor_of_source {
+                        self.errors.push(format!(
+                            "Error semántico: 'as' entre tipos no relacionados: '{}' y '{}'.",
+                            source_name, target_name
+                        ));
+                    }
+                }
+                // If expr_ty is Unknown we skip Rule 3 silently — the type
+                // inferrer could not determine the source type, and the
+                // runtime will handle it.
+            }
+        ,
+        Expr::TypeTest(node) => {
+            self.check_expr(&node.expr);
+
+            let expr_ty = self.type_of(&node.expr);
+
+            // Rule 1: source must be a class type (or Unknown to allow
+            // partially-inferred programs to proceed).
+            match &expr_ty {
+                HulkType::Class(_) | HulkType::Unknown => {}
+                other => {
+                    self.errors.push(format!(
+                        "Error semántico: el operador 'is' no puede aplicarse a tipo primitivo {:?}.",
+                        other
+                    ));
+                }
+            }
+
+            // Rule 2: target type must exist.
+            let target_name = node.target_type.value.as_id();
+            if !self.env.types.contains_key(&target_name) {
+                self.errors.push(format!(
+                    "Error semántico: el tipo '{}' usado en 'is' no está declarado.",
+                    target_name
+                ));
+            }
+        },
                     }
     }
 
@@ -635,8 +706,8 @@ impl SemanticChecker {
             Expr::MemberAccess(n)  => n.return_type.clone(),
             Expr::MethodCall(n)    => n.return_type.clone(),
             Expr::BaseCall(_)      => HulkType::Unknown,
-            Expr::TypeDowncast(type_downcast_node) => todo!(),
-            Expr::TypeTest(type_test_node) => todo!(),
+            Expr::TypeDowncast(n) => n.return_type.clone(),
+            Expr::TypeTest(n) => n.return_type.clone(),
         }
     }
 
