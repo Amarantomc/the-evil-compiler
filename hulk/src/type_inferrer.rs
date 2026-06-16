@@ -66,6 +66,7 @@ pub enum Constraint {
     Eq(InferType, InferType),
     /// `lhs` debe conformar (ser subtipo) de `rhs`.
     Conform(InferType, InferType),
+    TupleProject(InferType, usize, InferType),
 }
 
 // ============================================================================
@@ -103,6 +104,7 @@ impl Substitution {
         match c {
             Constraint::Eq(a, b)     => Constraint::Eq(self.apply(a), self.apply(b)),
             Constraint::Conform(a, b) => Constraint::Conform(self.apply(a), self.apply(b)),
+            Constraint::TupleProject(t, idx, r) => Constraint::TupleProject(self.apply(t), *idx, self.apply(r)),
         }
     }
 }
@@ -538,6 +540,10 @@ impl TypeInferrer {
         self.constraints.push(Constraint::Conform(sub, sup));
     }
 
+    fn add_tuple_project(&mut self, tuple_ty: InferType, index: usize, result: InferType) {
+        self.constraints.push(Constraint::TupleProject(tuple_ty, index, result));
+    }
+
     // ========================================================================
     // Etapa 3 — Resolución iterativa (worklist + unificación)
     // ========================================================================
@@ -605,8 +611,26 @@ impl TypeInferrer {
                     // Alguno es Var: re-encolar hasta resolver.
                     _ => Some(Constraint::Conform(sub, sup)),
                 }
-            }
+            } 
+            Constraint::TupleProject(tuple_ty, index, result) => {
+                let tuple_ty = self.subst.apply(&tuple_ty);
+                let result = self.subst.apply(&result);
+                match &tuple_ty {
+                    InferType::Concrete(HulkType::Tuple(elems)) => {
+                        if let Some(elem_ty) = elems.get(index).cloned() {
+                            let elem_infer = InferType::Concrete(elem_ty);
+                            if let InferType::Var(id) = result {
+                                let bound = self.subst.bind(id, elem_infer);
+                                if bound { self.changed = true; }
+                            }
+                        }
+                        None
+                    }
+                    InferType::Concrete(_) => None, // tipo concreto pero no-tupla: error semántico ya cubierto por SemanticChecker
+                    InferType::Var(_) => Some(Constraint::TupleProject(tuple_ty, index, result)), // aún no resuelto, reintentar
+                }
         }
+    }
     }
 
     // ========================================================================
@@ -1278,12 +1302,8 @@ impl ExprVisitor<InferType> for TypeInferrer {
     
     fn visit_tuple_access(&mut self, node: &mut TupleAccessNode) -> InferType {
         let tuple_ty = node.tuple.accept(self);
-        if let InferType::Concrete(HulkType::Tuple(ref elems)) = tuple_ty {
-            elems.get(node.index)
-                .map(|h| InferType::Concrete(h.clone()))
-                .unwrap_or_else(|| self.var_gen.fresh())
-        } else {
-            self.var_gen.fresh()
-        }
+        let result_var = self.var_gen.fresh();
+        self.add_tuple_project(tuple_ty, node.index, result_var.clone());
+        result_var
     }
 }
