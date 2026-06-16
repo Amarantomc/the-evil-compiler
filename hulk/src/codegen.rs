@@ -316,7 +316,7 @@ impl CodeGenerator {
             HulkType::String  => "ptr".to_string(),
             HulkType::Class(_) => "ptr".to_string(),
             HulkType::Unknown  => "ptr".to_string(), //Medida de seguridad 
-            HulkType::Tuple(elems) => format!("%{}", Self::tuple_struct_name(elems)),
+            HulkType::Tuple(elems) =>  format!("%{}", Self::tuple_struct_name(elems)),
         }
     }
 
@@ -740,10 +740,21 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
             "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 {}",
             field_ptr, type_name, self_ptr, struct_idx
         ));
-        generator.emit(format!(
-            "store {} {}, ptr {}",
-            field_llvm_ty, init_val.register, field_ptr
-        ));
+
+        match field_llvm_ty.as_str() {
+            // "double"| "i1"  => {
+            //     generator.emit(format!(
+            //         "store {} {}, ptr {}",
+            //         field_llvm_ty, init_val.register, field_ptr
+            //     ));
+            // }
+            _ => {
+                generator.emit(format!(
+                    "store ptr {}, ptr {}", init_val.register, field_ptr
+                ));
+            }
+            
+        }
     }
  
     generator.pop_scope();

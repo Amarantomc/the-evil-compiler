@@ -30,7 +30,14 @@ pub mod nodes {
 
 fn main() {
     let input = "
-    let x = (3,4) , y = (5,5) in print(x.0 + y.0);
+    type Point(x, y: Number) {
+    x = x;
+    y: Number = y;
+
+    getX() => self.x.0;
+
+}
+    let x = new Point((3,4),5) in print(x.getX());
     ";
 
     // ---- 1. Parseo --------------------------------------------------------
@@ -66,16 +73,16 @@ let mut inferrer = type_inferrer::TypeInferrer::new();
     
     // El entorno se mueve al checker: si necesitaras acceder a él después,
     // añade un campo público o un getter.
-    // let mut checker = semantic::SemanticChecker::new(inferrer.env);
-    // checker.check_program(&program);
+    let mut checker = semantic::SemanticChecker::new(inferrer.env);
+    checker.check_program(&program);
 
-    // if !checker.errors.is_empty() {
-    //     eprintln!("Errores semánticos:");
-    //     for e in &checker.errors {
-    //         eprintln!("  - {}", e);
-    //     }
-    //     std::process::exit(1);
-    // }
+    if !checker.errors.is_empty() {
+        eprintln!("Errores semánticos:");
+        for e in &checker.errors {
+            eprintln!("  - {}", e);
+        }
+        std::process::exit(1);
+    }
 
     // ---- 4. Generación de código ------------------------------------------
     println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
@@ -87,11 +94,3 @@ let mut inferrer = type_inferrer::TypeInferrer::new();
     }
 }
 
-// type Point(x, y: Number) {
-//     x = x;
-//     y: Number = y;
-
-//     getX() => x.0;
-
-// }
-//     let x = new Point((3,4),5) in print(x.getX());
