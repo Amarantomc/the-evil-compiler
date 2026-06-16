@@ -1,6 +1,20 @@
-﻿use crate::{expr_visitor::ExprVisitor, nodes::{binaryop_node::BinaryOpNode, block_node::BlockNode, destassing_node::DestAssignNode, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, literal_node::{Literal, LiteralNode}, member_access_node::{MemberAccessNode, MethodCallNode}, type_downcast_node::TypeDowncastNode, type_test_node::TypeTestNode, unaryop_node::UnaryOpNode, while_node::WhileNode}};
-
-
+﻿use crate::{expr_visitor::ExprVisitor, nodes::{
+    binaryop_node::BinaryOpNode,
+    block_node::BlockNode,
+    destassing_node::DestAssignNode,
+    for_node::ForNode,
+    funcall_node::FunCallNode,
+    if_node::IfNode,
+    instantiation_node::InstantiationNode,
+    let_node::LetNode,
+    literal_node::{Literal, LiteralNode},
+    member_access_node::{MemberAccessNode, MethodCallNode},
+    tuple_node::{TupleNode, TupleAccessNode},
+    type_downcast_node::TypeDowncastNode,
+    type_test_node::TypeTestNode,
+    unaryop_node::UnaryOpNode,
+    while_node::WhileNode,
+}};
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9,6 +23,7 @@ pub enum HulkType {
     Bool,
     String,
     Class(String),
+    Tuple(Vec<HulkType>),
     Unknown,
 }
 
@@ -31,7 +46,9 @@ pub enum Expr {
     SelfRef,
     BaseCall(Vec<Expr>),
     TypeDowncast(TypeDowncastNode),
-    TypeTest(TypeTestNode), 
+    TypeTest(TypeTestNode),
+    Tuple(TupleNode),
+    TupleAccess(TupleAccessNode),
 }
 
 
@@ -44,9 +61,6 @@ pub enum Expr {
 
 impl Expr {
      
-    
-    
-
     pub fn accept<T>(&mut self, v: &mut impl ExprVisitor<T>) -> T {
         match self {
             Expr::Literal(node) => match &node.value {
@@ -71,6 +85,8 @@ impl Expr {
             Expr::BaseCall(typed_exprs) => v.visit_base_call(typed_exprs),
             Expr::TypeDowncast(type_downcast_node) => v.visit_type_downcast(type_downcast_node),
             Expr::TypeTest(type_test_node) => v.visit_type_test(type_test_node),
+            Expr::Tuple(tuple_node) => v.visit_tuple(tuple_node),
+            Expr::TupleAccess(tuple_access_node) => v.visit_tuple_access(tuple_access_node),
         }
     }
 }

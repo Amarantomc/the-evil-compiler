@@ -93,6 +93,15 @@ pub struct CodeGenerator {
     pub current_type_context: Option<String>,
     pub global_decls: Vec<String>,
     pub current_method_context: Option<String>,
+    /// Tipos struct de tupla ya emitidos (`%Tuple_xxx = type {...}`).
+    ///
+    /// Por qué deduplicar:
+    ///   LLVM no permite redefinir un `%Tipo = type {...}` con el mismo
+    ///   nombre.  Como dos tuplas distintas en el programa pueden tener
+    ///   exactamente la misma forma (e.g. dos `(Number, Number)`), deben
+    ///   compartir el mismo tipo struct LLVM.  Este set evita emitir el
+    ///   mismo `type` dos veces.
+    pub emitted_tuple_types: std::collections::HashSet<String>,
 }
 
 impl CodeGenerator {
@@ -107,6 +116,7 @@ impl CodeGenerator {
             current_type_context: None,
             global_decls: Vec::new(),
             current_method_context : None,
+            emitted_tuple_types: std::collections::HashSet::new(),
         }
     }
 
@@ -306,7 +316,38 @@ impl CodeGenerator {
             HulkType::String  => "ptr".to_string(),
             HulkType::Class(_) => "ptr".to_string(),
             HulkType::Unknown  => "ptr".to_string(), //Medida de seguridad 
+            HulkType::Tuple(elems) => format!("%{}", Self::tuple_struct_name(elems)),
         }
+    }
+
+    pub fn tuple_struct_name(elems: &[HulkType]) -> String {
+        let parts: Vec<String> = elems.iter().map(|e| {
+            // Usamos una representación plana (sin '%') apta para nombre de tipo.
+            match e {
+                HulkType::Number => "double".to_string(),
+                HulkType::Bool => "i1".to_string(),
+                HulkType::String => "ptr".to_string(),
+                HulkType::Class(n) => format!("cls{}", n),
+                HulkType::Tuple(inner) => format!("tup_{}", Self::tuple_struct_name(inner)),
+                HulkType::Unknown => "ptr".to_string(),
+            }
+        }).collect();
+        format!("Tuple_{}", parts.join("_"))
+    }
+
+    pub fn ensure_tuple_type_emitted(&mut self, elems: &[HulkType]) -> String {
+        let name = Self::tuple_struct_name(elems);
+        if !self.emitted_tuple_types.contains(&name) {
+            let field_types: Vec<String> = elems.iter()
+                .map(Self::hulk_type_to_llvm)
+                .collect();
+            self.global_decls.push(format!(
+                "%{} = type {{ {} }}",
+                name, field_types.join(", ")
+            ));
+            self.emitted_tuple_types.insert(name.clone());
+        }
+        name
     }
 
     // -----------------------------------------------------------------------

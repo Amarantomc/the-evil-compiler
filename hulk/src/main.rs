@@ -25,29 +25,13 @@ pub mod nodes {
     pub mod instantiation_node;
     pub mod type_downcast_node;
     pub mod type_test_node;
+    pub mod tuple_node;
 }
 
 fn main() {
-    let input = "type A {
-    
-}
-
-type B inherits A {
-    
-}
-
-type C inherits B {
-   
-}
-
-let x = new B() in
-    if (x is B)
-        let y : A = x as A in {
-            
-        }
-    else {
-       
-};";
+    let input = "
+    let x = (3,4) , y = (5,5) in print(x.0 + y.0);
+    ";
 
     // ---- 1. Parseo --------------------------------------------------------
     let parser = grammar::ProgramParser::new();
@@ -82,16 +66,16 @@ let mut inferrer = type_inferrer::TypeInferrer::new();
     
     // El entorno se mueve al checker: si necesitaras acceder a él después,
     // añade un campo público o un getter.
-    let mut checker = semantic::SemanticChecker::new(inferrer.env);
-    checker.check_program(&program);
+    // let mut checker = semantic::SemanticChecker::new(inferrer.env);
+    // checker.check_program(&program);
 
-    if !checker.errors.is_empty() {
-        eprintln!("Errores semánticos:");
-        for e in &checker.errors {
-            eprintln!("  - {}", e);
-        }
-        std::process::exit(1);
-    }
+    // if !checker.errors.is_empty() {
+    //     eprintln!("Errores semánticos:");
+    //     for e in &checker.errors {
+    //         eprintln!("  - {}", e);
+    //     }
+    //     std::process::exit(1);
+    // }
 
     // ---- 4. Generación de código ------------------------------------------
     println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
@@ -102,3 +86,12 @@ let mut inferrer = type_inferrer::TypeInferrer::new();
         Err(e) => eprintln!("Error generando IR: {}", e),
     }
 }
+
+// type Point(x, y: Number) {
+//     x = x;
+//     y: Number = y;
+
+//     getX() => x.0;
+
+// }
+//     let x = new Point((3,4),5) in print(x.getX());

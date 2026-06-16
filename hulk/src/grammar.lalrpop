@@ -17,7 +17,8 @@ use crate::nodes::{
     unaryop_node::{UnaryOp, UnaryOpNode},
     while_node::WhileNode,
     type_test_node::TypeTestNode,
-    type_downcast_node::TypeDowncastNode
+    type_downcast_node::TypeDowncastNode,
+    tuple_node::{TupleNode, TupleAccessNode},
 };
 
 grammar;
@@ -32,7 +33,6 @@ Statement: Statement = {
     <expr:TopExpr> => Statement::Expression(expr),
 };
 
-// Top level: SimpleExpr requiere ; u BlockExpr tiene ; opcional
 TopExpr: Expr = {
     <e:SimpleExpr> ";" => e,
     <e:BlockExpr> (";")?  => e
@@ -66,7 +66,7 @@ TypeDecl: TypeDeclNode = {
                 TypeBodyItem::FunctionDecl(m) => methods.push(m),
             }
         }
-        TypeDeclNode::with_inheritance(name, params.unwrap_or(vec![]),attributes, methods,inheritance)
+        TypeDeclNode::with_inheritance(name, params.unwrap_or(vec![]), attributes, methods, inheritance)
     }
 };
 
@@ -83,10 +83,18 @@ TypeBodyItem: TypeBodyItem = {
     },
     <MethodDecl> => TypeBodyItem::FunctionDecl(<>),
 };
- 
 
- 
-
+// ──────────────────────────────────────────────────────────────────────────
+// Parámetros: `id : Type`
+//
+// Por qué mantener TypeAnnotation obligatoria para params de funciones/tipos
+// en lugar de inferirla:
+//   En declaraciones formales se exige la anotación porque el lenguaje no
+//   tiene inferencia de Hindley-Milner completa para parámetros.  La
+//   anotación sirve como firma pública del contrato de la función/tipo.
+//   El `?` en `TypeAnnotation?` permite omitirla (queda Unknown) cuando el
+//   programador prefiere no anotar — el inferidor llenará el hueco si puede.
+// ──────────────────────────────────────────────────────────────────────────
 Param: (LiteralNode, HulkType) = {
     <id:Ident> <ty:TypeAnnotation?> => (id, ty.unwrap_or(HulkType::Unknown))
 };
@@ -95,31 +103,51 @@ TypeAnnotation: HulkType = {
     ":" <Type> => <>
 };
 
+// ──────────────────────────────────────────────────────────────────────────
+// Tipos de anotación, incluyendo tipos tupla.
+//
+// Sintaxis para tipo tupla en anotaciones:
+//   (Type, Type, ...)
+//
+// Por qué sintaxis de paréntesis y no corchetes:
+//   La mayoría de lenguajes con tuplas (Python, Rust, Swift, Scala, F#)
+//   usan paréntesis para denotar tanto la construcción como el tipo.
+//   Es consistente con la expresión de tupla `(e1, e2)`.
+// ──────────────────────────────────────────────────────────────────────────
 Type: HulkType = {
-    "Number" => HulkType::Number,
-    "String" => HulkType::String,
+    "Number"  => HulkType::Number,
+    "String"  => HulkType::String,
     "Boolean" => HulkType::Bool,
-    <id:Ident> =>  HulkType::Class(id.value.as_id())
+    <id:Ident> => HulkType::Class(id.value.as_id()),
+    // Tipo tupla: `(Type, Type, ...)`  — al menos 2 elementos para distinguir
+    // de `(Type)` que sería solo un tipo entre paréntesis.
+    "(" <t1:Type> "," <rest:Comma1<Type>> ")" => {
+        let mut elems = vec![t1];
+        elems.extend(rest);
+        HulkType::Tuple(elems)
+    },
 };
 
-
-Comma<T>: Vec<T> = { 
-    <mut v:(<T> ",")*> <e:T?> => match e { 
+// Comma<T> que acepta 0 o más elementos
+Comma<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T?> => match e {
         None => v,
-        Some(e) => {
-            v.push(e);
-            v
-        }
+        Some(e) => { v.push(e); v }
     }
 };
 
-// Expresión pura (sin ; manejo): usado dentro de Let, If, While, For
+// Comma1<T>: uno o más elementos separados por coma (sin coma trailing)
+// Usado para tipo tupla: queremos (T, T, ...) con al menos un elemento tras
+// la primera coma.
+Comma1<T>: Vec<T> = {
+    <mut v:(<T> ",")*> <e:T> => { v.push(e); v }
+};
+
 pub ExprRule: Expr = {
     SimpleExpr,
     BlockExpr,
 };
 
-// Expresiones simples que requieren ; en top level (pero el ; se agrega en TopExpr)
 SimpleExpr: Expr = {
     LetExpr,
     IfExpr,
@@ -128,14 +156,12 @@ SimpleExpr: Expr = {
     ConcExpr,
 };
 
-// Bloques que tienen ; opcional en top level
 BlockExpr: Expr = {
-    "{" <exprs:(BlockItem)*> "}"  => {
+    "{" <exprs:(BlockItem)*> "}" => {
         Expr::Block(BlockNode::new(exprs))
     }
 };
 
-// Items dentro de un bloque: pueden ser simples (con ;) o bloques (con ; opcional)
 BlockItem: Expr = {
     <e:SimpleExpr> ";" => e,
     <e:BlockExpr> (";")?  => e
@@ -174,95 +200,77 @@ Assignment: ((LiteralNode, HulkType), Expr) = {
     <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
 };
 
-pub ConcExpr : Expr = {
-    <l: ConcExpr> <op : ConcOpcode> <r: OrExpr> => {
-        Expr::Binary(BinaryOpNode::new(l,op,r))
-    },
+pub ConcExpr: Expr = {
+    <l:ConcExpr> <op:ConcOpcode> <r:OrExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
     OrExpr,
 };
 
 ConcOpcode: BinaryOp = {
-    "@" => BinaryOp::SingleConc,
-    "@@" => BinaryOp::SpacedConc
+    "@"  => BinaryOp::SingleConc,
+    "@@" => BinaryOp::SpacedConc,
 };
 
-pub OrExpr: Expr = { 
-    <l:OrExpr> <op:OrOpcode> <r:AndExpr> => {
-        Expr::Binary(BinaryOpNode::new(l, op, r))
-    },
+pub OrExpr: Expr = {
+    <l:OrExpr> <op:OrOpcode> <r:AndExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
     AndExpr,
 };
 
 OrOpcode: BinaryOp = {
-    "|" => BinaryOp::Or,
-    "||" => BinaryOp::Or
+    "|"  => BinaryOp::Or,
+    "||" => BinaryOp::Or,
 };
 
 pub AndExpr: Expr = {
-    <l:AndExpr> <op:AndOpcode> <r:AssignExpr> => {
-        Expr::Binary(BinaryOpNode::new(l, op, r))
-    },
+    <l:AndExpr> <op:AndOpcode> <r:AssignExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
     AssignExpr,
 };
 
 AndOpcode: BinaryOp = {
-    "&" => BinaryOp::And,
-    "&&" => BinaryOp::And
+    "&"  => BinaryOp::And,
+    "&&" => BinaryOp::And,
 };
 
 AssignExpr: Expr = {
-    <id:Term> ":=" <expr:AssignExpr> => {
-        Expr::DestAssign(DestAssignNode::new(id, expr))
-    },
+    <id:Term> ":=" <expr:AssignExpr> => Expr::DestAssign(DestAssignNode::new(id, expr)),
     CompExpr,
 };
 
 pub CompExpr: Expr = {
-    <l:CompExpr> <op:CompOpcode> <r:IsExpr> => {
-        Expr::Binary(BinaryOpNode::new(l, op, r))
-    },
+    <l:CompExpr> <op:CompOpcode> <r:IsExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
     IsExpr,
 };
 
-CompOpcode: BinaryOp = { 
+CompOpcode: BinaryOp = {
     "==" => BinaryOp::Equal,
     "!=" => BinaryOp::Dist,
     ">=" => BinaryOp::Gequa,
     "<=" => BinaryOp::Lequa,
-    ">" => BinaryOp::Great,
-    "<" => BinaryOp::Less
+    ">"  => BinaryOp::Great,
+    "<"  => BinaryOp::Less,
 };
 
 pub IsExpr: Expr = {
-    <l:IsExpr> "is" <r:Ident> => {
-        Expr::TypeTest(TypeTestNode::new(l,r))
-    },
+    <l:IsExpr> "is" <r:Ident> => Expr::TypeTest(TypeTestNode::new(l, r)),
     AsExpr,
 };
 
 pub AsExpr: Expr = {
-    <l:AsExpr> "as" <r:Ident> => {
-        Expr::TypeDowncast(TypeDowncastNode::new(l,r))
-    },
+    <l:AsExpr> "as" <r:Ident> => Expr::TypeDowncast(TypeDowncastNode::new(l, r)),
     ArithExpr,
 };
 
 pub ArithExpr: Expr = {
-    <l:ArithExpr> <op:ArithOpCode> <r:FactAnd> => {
-        Expr::Binary(BinaryOpNode::new(l, op, r))
-    },
+    <l:ArithExpr> <op:ArithOpCode> <r:FactAnd> => Expr::Binary(BinaryOpNode::new(l, op, r)),
     FactAnd,
 };
 
-ArithOpCode: BinaryOp = { 
+ArithOpCode: BinaryOp = {
     "+" => BinaryOp::Add,
     "-" => BinaryOp::Sub,
 };
 
 FactAnd: Expr = {
-    <l:FactAnd> <op:FactAndOp> <r:UnaryExpr> => {
-        Expr::Binary(BinaryOpNode::new(l, op, r))
-    },
+    <l:FactAnd> <op:FactAndOp> <r:UnaryExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
     UnaryExpr,
 };
 
@@ -273,9 +281,7 @@ FactAndOp: BinaryOp = {
 };
 
 UnaryExpr: Expr = {
-    <op:UnaryOpCode> <expr:Base> => {
-        Expr::Unary(UnaryOpNode::new(op, expr))
-    },
+    <op:UnaryOpCode> <expr:Base> => Expr::Unary(UnaryOpNode::new(op, expr)),
     Base,
 };
 
@@ -286,9 +292,7 @@ UnaryOpCode: UnaryOp = {
 };
 
 Base: Expr = {
-    <l:Base> <op:PowOpcode> <r:Term> => {
-        Expr::Binary(BinaryOpNode::new(l, op, r))
-    },
+    <l:Base> <op:PowOpcode> <r:Term> => Expr::Binary(BinaryOpNode::new(l, op, r)),
     Term,
 };
 
@@ -298,11 +302,16 @@ PowOpcode: BinaryOp = {
 
 Term: Expr = {
     Num => Expr::Literal(LiteralNode::new(Literal::Number(<>))),
-    "true" => Expr::Literal(LiteralNode::new(Literal::Bool(true))),
+    "true"  => Expr::Literal(LiteralNode::new(Literal::Bool(true))),
     "false" => Expr::Literal(LiteralNode::new(Literal::Bool(false))),
     StringLit => Expr::Literal(LiteralNode::new(Literal::Str(<>))),
     "new" <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
         Expr::Instantiation(FunCallNode::new(id, args))
+    },
+    // Acceso a elemento de tupla: `expr.0`, `expr.1`, ...
+    // El índice viene como f32 del lexer de Num; lo convertimos a usize.
+    <inst:Term> "." <idx:TupleIndex> => {
+        Expr::TupleAccess(TupleAccessNode::new(inst, idx))
     },
     <inst:Term> "." <call:FunCall> => {
         Expr::MethodCall(MethodCallNode::new(inst, call))
@@ -311,11 +320,18 @@ Term: Expr = {
         Expr::MemberAccess(MemberAccessNode::new(inst, member))
     },
     <FunCall> => Expr::FunCall(<>),
-    "(" <ExprRule> ")" ,
+
+    "(" <e1:SimpleExpr> "," <rest:Comma1<SimpleExpr>> ")" => {
+        let mut elems = vec![e1];
+        elems.extend(rest);
+        Expr::Tuple(TupleNode::new(elems))
+    },
+    "(" <ExprRule> ")",
     "base" "(" <args:Comma<SimpleExpr>> ")" => Expr::BaseCall(args),
     "self" => Expr::SelfRef,
-    <id: Ident> => Expr::Literal(id)
+    <id:Ident> => Expr::Literal(id),
 };
+
 
 FunCall: FunCallNode = {
     <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
@@ -323,8 +339,17 @@ FunCall: FunCallNode = {
     },
 };
 
+TupleIndex: usize = {
+    r"[0-9]+" => <>.parse::<usize>().unwrap()
+};
+
+Float: f32 = {
+    r"[0-9]+\.[0-9]+" => f32::from_str(<>).unwrap()
+};
+
 Num: f32 = {
-    r"[0-9]+(\.[0-9]+)?" => f32::from_str(<>).unwrap()
+    <i: TupleIndex> => i as f32,
+    <f: Float> => f,
 };
 
 StringLit: String = {

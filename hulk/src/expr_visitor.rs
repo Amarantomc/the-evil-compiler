@@ -1,4 +1,4 @@
-use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::Expr, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, member_access_node::{MemberAccessNode, MethodCallNode}, type_downcast_node::TypeDowncastNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode};
+use crate::nodes::{binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::Expr, for_node::ForNode, funcall_node::FunCallNode, if_node::IfNode, instantiation_node::InstantiationNode, let_node::LetNode, member_access_node::{MemberAccessNode, MethodCallNode}, tuple_node::{TupleAccessNode, TupleNode}, type_downcast_node::TypeDowncastNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode};
 
  
 
@@ -23,4 +23,6 @@ pub trait ExprVisitor<T> {
     fn visit_base_call(&mut self, args: &mut [Expr]) -> T;
     fn visit_type_downcast(&mut self, node: &mut TypeDowncastNode) -> T;
     fn visit_type_test(&mut self, node: &mut TypeTestNode) -> T;
+    fn visit_tuple(&mut self, node: &mut TupleNode) -> T;
+    fn visit_tuple_access(&mut self, node: &mut TupleAccessNode) -> T;
 }
