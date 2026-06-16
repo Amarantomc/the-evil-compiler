@@ -21,7 +21,7 @@ use std::collections::{HashMap, VecDeque};
 use crate::{
     expr_visitor::ExprVisitor,
     nodes::{
-        binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::{Expr, HulkType}, for_node::ForNode, funcall_node::FunCallNode, function_decl_node::FunctionDecl, if_node::IfNode, let_node::LetNode, literal_node::Literal, member_access_node::{MemberAccessNode, MethodCallNode}, program_node::{Program, Statement}, type_decl_node::TypeDeclNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode
+        binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::{Expr, HulkType}, for_node::ForNode, funcall_node::FunCallNode, function_decl_node::FunctionDecl, if_node::IfNode, let_node::LetNode, literal_node::Literal, member_access_node::{MemberAccessNode, MethodCallNode}, program_node::{Program, Statement}, tuple_node::{TupleAccessNode, TupleNode}, type_decl_node::TypeDeclNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode
     },
 };
 
@@ -860,6 +860,23 @@ impl TypeInferrer {
                 self.annotate_expr(&mut node.expr);
                 node.return_type = HulkType::Bool;
             }
+            Expr::Tuple(node) => {
+                for e in &mut node.elements { self.annotate_expr(e); }
+                let elem_types: Vec<HulkType> = node.elements.iter()
+                    .map(|e| self.type_of_expr(e))
+                    .collect();
+                node.return_type = HulkType::Tuple(elem_types);
+            }
+            Expr::TupleAccess(node) => {
+                self.annotate_expr(&mut node.tuple);
+                let tuple_ty = self.type_of_expr(&node.tuple);
+                let result = if let HulkType::Tuple(ref elems) = tuple_ty {
+                    elems.get(node.index).cloned().unwrap_or(HulkType::Unknown)
+                } else {
+                    HulkType::Unknown
+                };
+                node.return_type = result;
+            }
         }
     }
 
@@ -892,6 +909,8 @@ impl TypeInferrer {
             Expr::BaseCall(_)      => HulkType::Unknown,
             Expr::TypeDowncast(n) => n.return_type.clone(),
             Expr::TypeTest(n) => n.return_type.clone(),
+            Expr::Tuple(n) => n.return_type.clone(),
+            Expr::TupleAccess(n) => n.return_type.clone(),
         }
     }
 
@@ -1244,5 +1263,27 @@ impl ExprVisitor<InferType> for TypeInferrer {
         // Annotate this node and return Bool.
         node.return_type = HulkType::Bool;
         InferType::bool_t()
+    }
+    
+    fn visit_tuple(&mut self, node: &mut TupleNode) -> InferType {
+        let elem_tys: Vec<InferType> = node.elements.iter_mut()
+            .map(|e| e.accept(self))
+            .collect();
+        // Construir tipo tupla concreto solo si todos los elementos son concretos.
+        let hulk_elems: Vec<HulkType> = elem_tys.iter().map(|t| {
+            if let InferType::Concrete(h) = t { h.clone() } else { HulkType::Unknown }
+        }).collect();
+        InferType::Concrete(HulkType::Tuple(hulk_elems))
+    }
+    
+    fn visit_tuple_access(&mut self, node: &mut TupleAccessNode) -> InferType {
+        let tuple_ty = node.tuple.accept(self);
+        if let InferType::Concrete(HulkType::Tuple(ref elems)) = tuple_ty {
+            elems.get(node.index)
+                .map(|h| InferType::Concrete(h.clone()))
+                .unwrap_or_else(|| self.var_gen.fresh())
+        } else {
+            self.var_gen.fresh()
+        }
     }
 }

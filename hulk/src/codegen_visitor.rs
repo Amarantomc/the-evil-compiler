@@ -10,6 +10,7 @@ use crate::nodes::instantiation_node::InstantiationNode;
 use crate::nodes::let_node::LetNode;
 use crate::nodes::expr_node::{Expr, HulkType};
 use crate::nodes::member_access_node::{MemberAccessNode, MethodCallNode};
+use crate::nodes::tuple_node::{TupleAccessNode, TupleNode};
 use crate::nodes::type_downcast_node::TypeDowncastNode;
 use crate::nodes::type_test_node::TypeTestNode;
 use crate::nodes::unaryop_node::UnaryOp;
@@ -134,7 +135,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             if let Literal::Id(name) = &name_node.value {
                 let ptr = self.next_temp();
                 match hulk_type {
-                    HulkType::Class(_) => {
+                    HulkType::Class(_) | HulkType::Tuple(_) => {
                         self.emit(format!("{} = alloca ptr", ptr));
                         self.emit(format!("store ptr {}, ptr {}", val.register, ptr));
                     }
@@ -142,6 +143,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                         self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
                         self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, ptr));
                     }
+                    
                 }
                 self.define_variable(name.clone(), ptr, val.llvm_type.clone());
             }
@@ -696,5 +698,65 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         });
  
         GeneratorResult::new(result_reg, "i1".to_string())
+    }
+    
+    fn visit_tuple(&mut self, node: &mut TupleNode) -> GeneratorResult {
+        // Evaluar elementos primero (orden de evaluación izquierda-derecha).
+        let mut elem_results: Vec<GeneratorResult> = Vec::new();
+        for elem in &mut node.elements {
+            elem_results.push(elem.accept(self));
+        }
+ 
+        // El tipo de la tupla ya fue resuelto por el type_inferrer y vive
+        // en node.return_type. Si por alguna razón quedó Unknown en algún
+        // elemento (programa con error semántico ya reportado), usamos el
+        // tipo LLVM real obtenido al evaluar cada elemento para no romper
+        // la generación de IR.
+        let elem_hulk_types: Vec<HulkType> = if let HulkType::Tuple(ref types) = node.return_type {
+            types.clone()
+        } else {
+            // Fallback defensivo: reconstruir desde los resultados LLVM.
+            elem_results.iter().map(|r| match r.llvm_type.as_str() {
+                "double" => HulkType::Number,
+                "i1"     => HulkType::Bool,
+                "ptr"    => HulkType::String,
+                other if other.starts_with('%') => HulkType::Class(other.trim_start_matches('%').to_string()),
+                _ => HulkType::Unknown,
+            }).collect()
+        };
+ 
+        let struct_name = self.ensure_tuple_type_emitted(&elem_hulk_types);
+        let llvm_struct_ty = format!("%{}", struct_name);
+ 
+        let tuple_ptr = self.next_temp();
+        self.emit(format!("{} = alloca {}", tuple_ptr, llvm_struct_ty));
+ 
+        for (i, val) in elem_results.iter().enumerate() {
+            let slot_ptr = self.next_temp();
+            self.emit(format!(
+                "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {} ; elemento {}",
+                slot_ptr, llvm_struct_ty, tuple_ptr, i, i
+            ));
+            self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, slot_ptr));
+        }
+ 
+        GeneratorResult::new(tuple_ptr, llvm_struct_ty)
+    }
+    
+    fn visit_tuple_access(&mut self, node: &mut TupleAccessNode) -> GeneratorResult {
+        let tuple_res = node.tuple.accept(self);
+ 
+        let elem_llvm_ty = CodeGenerator::hulk_type_to_llvm(&node.return_type);
+ 
+        let slot_ptr = self.next_temp();
+        self.emit(format!(
+            "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {} ; acceso .{}",
+            slot_ptr, tuple_res.llvm_type, tuple_res.register, node.index, node.index
+        ));
+ 
+        let val_reg = self.next_temp();
+        self.emit(format!("{} = load {}, ptr {}", val_reg, elem_llvm_ty, slot_ptr));
+ 
+        GeneratorResult::new(val_reg, elem_llvm_ty)
     }
 }

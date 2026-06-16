@@ -655,8 +655,32 @@ impl SemanticChecker {
                 ));
             }
         },
+        Expr::Tuple(node) => {
+            for e in &node.elements { self.check_expr(e); }
+        }
+        Expr::TupleAccess(node) => {
+            self.check_expr(&node.tuple);
+            let tuple_ty = self.type_of(&node.tuple);
+            match &tuple_ty {
+                HulkType::Tuple(elems) => {
+                    if node.index >= elems.len() {
+                        self.errors.push(format!(
+                            "Error semántico: índice de tupla {} fuera de rango (la tupla tiene {} elementos).",
+                            node.index, elems.len()
+                        ));
                     }
+                }
+                HulkType::Unknown => self.errors.push(format!("Error semántico : inferencia de tipo no resuelta en el simbolo del indice {} ", node.index)), 
+                other => {
+                    self.errors.push(format!(
+                        "Error semántico: acceso por índice sobre tipo no-tupla {:?}.", other
+                    ));
+                }
+            }
+         
+        }
     }
+}
 
     // ========================================================================
     // Helpers de scope
@@ -708,6 +732,8 @@ impl SemanticChecker {
             Expr::BaseCall(_)      => HulkType::Unknown,
             Expr::TypeDowncast(n) => n.return_type.clone(),
             Expr::TypeTest(n) => n.return_type.clone(),
+            Expr::Tuple(n) => n.return_type.clone(),
+            Expr::TupleAccess(n) => n.return_type.clone(),
         }
     }
 
