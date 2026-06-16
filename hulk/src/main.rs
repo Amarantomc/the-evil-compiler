@@ -30,14 +30,14 @@ pub mod nodes {
 
 fn main() {
     let input = "
-    type Point(x, y: Number) {
+    type Point(x) {
     x = x;
-    y: Number = y;
+    
 
     getX() => self.x.0;
 
 }
-    let x = new Point((3,4),5) in print(x.getX());
+    let x = new Point((3,4)) in print(x.getX());
     ";
 
     // ---- 1. Parseo --------------------------------------------------------

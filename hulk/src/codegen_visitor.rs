@@ -379,7 +379,11 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         if let Literal::Id(type_name) = &node.name.value {
             let res_reg = self.next_temp();
             let arg_strings: Vec<String> = args.iter()
-                .map(|a| format!("{} {}", a.llvm_type, a.register))
+                .map(|a|  if a.llvm_type == "double" || a.llvm_type == "i1" {
+                    format!("{} {}", a.llvm_type, a.register)
+                } else {
+                    format!("ptr {}", a.register)
+                })
                 .collect();
             self.emit(format!(
                 "{} = call ptr @{}_new({})",
