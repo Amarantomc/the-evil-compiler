@@ -206,6 +206,14 @@ impl Environment {
         if matches!(sub, HulkType::Unknown) || matches!(sup, HulkType::Unknown) {
             return true;
         }
+        
+        if matches!(sub, HulkType::Param(_)) || matches!(sup, HulkType::Param(_)) {
+            return true; // T libre: conforma con cualquier cosa
+        }
+        if let (HulkType::Generic(_,_), _) | (_, HulkType::Generic(_,_)) = (sub, sup) {
+            // Compara por su forma manglada (nominal). Igualdad estructural simple.
+            return sub.mangle() == sup.mangle();
+        }
         match (sub, sup) {
             (HulkType::Number, _) | (_, HulkType::Number) => return false,
             (HulkType::String, _) | (_, HulkType::String) => return false,

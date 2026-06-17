@@ -1,7 +1,7 @@
 use crate::nodes::{function_decl_node::FunctionDecl, expr_node::Expr, type_decl_node::TypeDeclNode};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
     pub statements: Vec<Statement>,
 }
@@ -12,7 +12,7 @@ impl Program {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     FunctionDecl(FunctionDecl),
     TypeDecl(TypeDeclNode),

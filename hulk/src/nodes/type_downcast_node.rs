@@ -1,7 +1,7 @@
 use crate::nodes::{expr_node::{Expr, HulkType}, literal_node::LiteralNode};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeDowncastNode {
       pub expr: Box<Expr>,
       pub target_type: LiteralNode,

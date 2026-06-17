@@ -1,7 +1,7 @@
 use crate::nodes::expr_node::{Expr, HulkType};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct IfNode {
     pub condition: Box<Expr>,
     pub if_branch: Box<Expr>,

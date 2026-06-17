@@ -1,7 +1,7 @@
 use crate::nodes::{literal_node::LiteralNode, expr_node::{HulkType, Expr}};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LetNode {
     pub assignments: Vec<((LiteralNode,HulkType), Expr)>,
     pub body: Box<Expr>,

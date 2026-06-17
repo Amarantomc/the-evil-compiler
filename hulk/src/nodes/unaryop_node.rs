@@ -8,7 +8,7 @@ pub enum UnaryOp {
     Plus,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnaryOpNode {
     pub op: UnaryOp,
     pub expr: Box<Expr>,

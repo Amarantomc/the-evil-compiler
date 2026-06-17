@@ -27,21 +27,16 @@ pub mod nodes {
     pub mod type_test_node;
     pub mod tuple_node;
 }
-
+pub  mod generics {
+    pub mod promote;
+    pub mod mono;
+}
 fn main() {
     let input = "
-    type Line (x,y) {
-    x = x;
-    y =y;
+    function id<T>(x: T): T => x;
 
-    DotProduct() => self.x.0 * self.y.0 + self.x.1 * self.y.1;
-    SetX(x) => self.x := x;
-    GetX() => self.x.0;
-}
-    let x = new Line((3,4),(5,5)) in 
-    {
-    print(x.DotProduct());
-    };
+print(id::<Number>(42));
+print(id::<String>(\"Hello, generics!\"));
     ";
 
     // ---- 1. Parseo --------------------------------------------------------
@@ -58,6 +53,15 @@ fn main() {
     // El inferidor anota el AST con HulkType concretos y acumula solo errores
     // estructurales (e.g. función no encontrada durante la generación de
     // restricciones, que impediría seguir).
+    generics::promote::promote_program(&mut program);
+
+let mut mono = generics::mono::Monomorphizer::new();
+mono.run(&mut program);
+if !mono.errors.is_empty() {
+    eprintln!("Errores de monomorfización:");
+    for e in &mono.errors { eprintln!("  - {}", e); }
+    std::process::exit(1);
+}
     
 let mut inferrer = type_inferrer::TypeInferrer::new();
     inferrer.infer_program(&mut program);

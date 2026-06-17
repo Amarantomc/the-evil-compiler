@@ -314,8 +314,10 @@ impl CodeGenerator {
             HulkType::Bool    => "i1".to_string(),
             HulkType::String  => "ptr".to_string(),
             HulkType::Class(_) => "ptr".to_string(),
-            HulkType::Unknown  => "ptr".to_string(), //Medida de seguridad 
+            HulkType::Unknown  => "ptr".to_string(),
             HulkType::Tuple(elems) => format!("%{}", Self::tuple_struct_name(elems)),
+            HulkType::Param(_) => "ptr".to_string(),
+            HulkType::Generic(_, hulk_types) => "ptr".to_string(),
         }
     }
 
@@ -343,6 +345,9 @@ impl CodeGenerator {
                 HulkType::Class(n) => format!("cls{}", n),
                 HulkType::Tuple(inner) => format!("tup_{}", Self::tuple_struct_name(inner)),
                 HulkType::Unknown => "ptr".to_string(),
+                HulkType::Param(n)      => format!("p{}", n),
+                HulkType::Generic(n, a) => format!("cls{}__{}", n,
+    a.iter().map(|t| Self::tuple_struct_name(std::slice::from_ref(t))).collect::<Vec<_>>().join("_")),
             }
         }).collect();
         format!("Tuple_{}", parts.join("_"))
@@ -1013,7 +1018,8 @@ pub fn compile_hulk_program(
 
     let mut header: Vec<String> = vec![
         "; ModuleID = 'hulk'".to_string(),
-        "target triple = \"x86_64-pc-linux-gnu\"".to_string(),
+        //"target triple = \"x86_64-pc-linux-gnu\"".to_string(),
+        "target triple = \"x86_64-pc-windows-msvc\"".to_string(),
         "".to_string(),
         "declare ptr @malloc(i64)".to_string(),
         "declare i64 @strlen(ptr)".to_string(),

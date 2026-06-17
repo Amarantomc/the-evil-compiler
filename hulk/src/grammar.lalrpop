@@ -39,34 +39,39 @@ TopExpr: Expr = {
 };
 
 FunctionDecl: FunctionDecl = {
-    "function" <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> "=>" <body:ExprRule> ";" => {
-        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+    "function" <name:Ident> <g:GenericParams?> "(" <params:Comma<Param>> ")"
+        <ty:TypeAnnotation?> "=>" <body:ExprRule> ";" => {
+        FunctionDecl::new(name, g.unwrap_or_default(), params, body, ty.unwrap_or(HulkType::Unknown))
     },
-    "function" <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> <body:BlockExpr> (";")?  => {
-        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+    "function" <name:Ident> <g:GenericParams?> "(" <params:Comma<Param>> ")"
+        <ty:TypeAnnotation?> <body:BlockExpr> (";")? => {
+        FunctionDecl::new(name, g.unwrap_or_default(), params, body, ty.unwrap_or(HulkType::Unknown))
     },
 };
 
 MethodDecl: FunctionDecl = {
     <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> "=>" <body:ExprRule> ";" => {
-        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+        FunctionDecl::new(name, vec![], params, body, ty.unwrap_or(HulkType::Unknown))
     },
-    <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> <body:BlockExpr> (";")?  => {
-        FunctionDecl::new(name, params, body, ty.unwrap_or(HulkType::Unknown))
+    <name:Ident> "(" <params:Comma<Param>> ")" <ty:TypeAnnotation?> <body:BlockExpr> (";")? => {
+        FunctionDecl::new(name, vec![], params, body, ty.unwrap_or(HulkType::Unknown))
     },
 };
 
 TypeDecl: TypeDeclNode = {
-    "type" <name:Ident> <params:("(" <Comma<Param>> ")")?> <inheritance:InheritanceClause?> "{" <body:TypeBodyItem*> "}" => {
+    "type" <name:Ident> <g:GenericParams?> <params:("(" <Comma<Param>> ")")?>
+        <inheritance:InheritanceClause?> "{" <body:TypeBodyItem*> "}" => {
         let mut attributes = Vec::new();
         let mut methods = Vec::new();
         for item in body {
             match item {
-                TypeBodyItem::Assignment(a) => attributes.push(a),
+                TypeBodyItem::Assignment(a)   => attributes.push(a),
                 TypeBodyItem::FunctionDecl(m) => methods.push(m),
             }
         }
-        TypeDeclNode::with_inheritance(name, params.unwrap_or(vec![]), attributes, methods, inheritance)
+        TypeDeclNode::with_inheritance(
+            name, g.unwrap_or_default(), params.unwrap_or(vec![]),
+            attributes, methods, inheritance)
     }
 };
 
@@ -118,9 +123,10 @@ Type: HulkType = {
     "Number"  => HulkType::Number,
     "String"  => HulkType::String,
     "Boolean" => HulkType::Bool,
+    // Tipo aplicado: Box<Number>, Pair<Number, String>
+    <id:Ident> "<" <args:Comma1<Type>> ">" =>
+        HulkType::Generic(id.value.as_id(), args),
     <id:Ident> => HulkType::Class(id.value.as_id()),
-    // Tipo tupla: `(Type, Type, ...)`  — al menos 2 elementos para distinguir
-    // de `(Type)` que sería solo un tipo entre paréntesis.
     "(" <t1:Type> "," <rest:Comma1<Type>> ")" => {
         let mut elems = vec![t1];
         elems.extend(rest);
@@ -141,6 +147,15 @@ Comma<T>: Vec<T> = {
 // la primera coma.
 Comma1<T>: Vec<T> = {
     <mut v:(<T> ",")*> <e:T> => { v.push(e); v }
+};
+
+// <T, U, ...>  en posición de declaración (no hay contexto de expresión aquí).
+GenericParams: Vec<String> = {
+    "<" <ids:Comma1<Ident>> ">" => ids.into_iter().map(|i| i.value.as_id()).collect(),
+};
+
+TurboArgs: Vec<HulkType> = {
+    "::" "<" <args:Comma1<Type>> ">" => args,
 };
 
 pub ExprRule: Expr = {
@@ -305,9 +320,13 @@ Term: Expr = {
     "true"  => Expr::Literal(LiteralNode::new(Literal::Bool(true))),
     "false" => Expr::Literal(LiteralNode::new(Literal::Bool(false))),
     StringLit => Expr::Literal(LiteralNode::new(Literal::Str(<>))),
-    "new" <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
-        Expr::Instantiation(FunCallNode::new(id, args))
-    },
+    "new" <id:Ident> <ta:TurboArgs?> "(" <args:Comma<SimpleExpr>> ")" => {
+    let node = match ta {
+        Some(targs) => FunCallNode::with_type_args(id, targs, args),
+        None        => FunCallNode::new(id, args),
+    };
+    Expr::Instantiation(node)
+},
     // Acceso a elemento de tupla: `expr.0`, `expr.1`, ...
     // El índice viene como f32 del lexer de Num; lo convertimos a usize.
     <inst:Term> "." <idx:TupleIndex> => {
@@ -334,8 +353,11 @@ Term: Expr = {
 
 
 FunCall: FunCallNode = {
-    <id:Ident> "(" <args:Comma<SimpleExpr>> ")" => {
-        FunCallNode::new(id, args)
+    <id:Ident> <ta:TurboArgs?> "(" <args:Comma<SimpleExpr>> ")" => {
+        match ta {
+            Some(targs) => FunCallNode::with_type_args(id, targs, args),
+            None        => FunCallNode::new(id, args),
+        }
     },
 };
 
