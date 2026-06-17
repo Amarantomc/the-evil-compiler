@@ -23,6 +23,7 @@ impl GeneratorResult {
     }
 }
 
+
 // ---------------------------------------------------------------------------
 // ClassMeta  —  información de una clase necesaria en codegen
 // ---------------------------------------------------------------------------
@@ -75,7 +76,7 @@ pub struct ClassMeta {
 // ---------------------------------------------------------------------------
 // CodeGenerator
 // ---------------------------------------------------------------------------
-
+pub type BuiltinFn = fn(&mut CodeGenerator, &[GeneratorResult]) -> GeneratorResult;
 pub struct CodeGenerator {
     /// Instrucciones LLVM IR acumuladas.
     pub code: Vec<String>,
@@ -101,10 +102,74 @@ pub struct CodeGenerator {
     ///   compartir el mismo tipo struct LLVM.  Este set evita emitir el
     ///   mismo `type` dos veces.
     pub emitted_tuple_types: std::collections::HashSet<String>,
+    pub builtins: HashMap<String, BuiltinFn>,
 }
 
 impl CodeGenerator {
-    pub fn new() -> Self {
+   pub fn new() -> Self {
+        let mut builtins: HashMap<String, BuiltinFn> = HashMap::new();
+
+        // --- PRINT ---
+        builtins.insert("print".to_string(), |cg, args| {
+            if let Some(arg) = args.first() {
+                let res_reg = cg.next_temp();
+                match arg.llvm_type.as_str() {
+                    "double" => cg.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_double, double {})", res_reg, arg.register)),
+                    "i1" => {
+                        let str_ptr = cg.next_temp();
+                        cg.emit(format!("{} = select i1 {}, ptr @.str_true, ptr @.str_false", str_ptr, arg.register));
+                        cg.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", res_reg, str_ptr));
+                    }
+                    _ => cg.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", res_reg, arg.register)),
+                }
+            }
+            GeneratorResult::new("0.0".to_string(), "double".to_string())
+        });
+
+        // --- MATEMÁTICAS SIMPLES ---
+        builtins.insert("sqrt".to_string(), |cg, args| {
+            let res = cg.next_temp();
+            cg.emit(format!("{} = call double @sqrt(double {})", res, args[0].register));
+            GeneratorResult::new(res, "double".to_string())
+        });
+        builtins.insert("sin".to_string(), |cg, args| {
+            let res = cg.next_temp();
+            cg.emit(format!("{} = call double @sin(double {})", res, args[0].register));
+            GeneratorResult::new(res, "double".to_string())
+        });
+        builtins.insert("cos".to_string(), |cg, args| {
+            let res = cg.next_temp();
+            cg.emit(format!("{} = call double @cos(double {})", res, args[0].register));
+            GeneratorResult::new(res, "double".to_string())
+        });
+        builtins.insert("exp".to_string(), |cg, args| {
+            let res = cg.next_temp();
+            cg.emit(format!("{} = call double @exp(double {})", res, args[0].register));
+            GeneratorResult::new(res, "double".to_string())
+        });
+
+        // --- LOG (Cambio de base) ---
+        builtins.insert("log".to_string(), |cg, args| {
+            let log_val = cg.next_temp();
+            let log_base = cg.next_temp();
+            let res = cg.next_temp();
+            cg.emit(format!("{} = call double @log(double {})", log_val, args[1].register));
+            cg.emit(format!("{} = call double @log(double {})", log_base, args[0].register));
+            cg.emit(format!("{} = fdiv double {}, {}", res, log_val, log_base));
+            GeneratorResult::new(res, "double".to_string())
+        });
+
+        // --- RAND ---
+        builtins.insert("rand".to_string(), |cg, _args| {
+            let rand_int = cg.next_temp();
+            let rand_float = cg.next_temp();
+            let res = cg.next_temp();
+            cg.emit(format!("{} = call i32 @rand()", rand_int));
+            cg.emit(format!("{} = sitofp i32 {} to double", rand_float, rand_int));
+            cg.emit(format!("{} = fdiv double {}, 32767.0", res, rand_float));
+            GeneratorResult::new(res, "double".to_string())
+        });
+
         Self {
             code: Vec::new(),
             temp_counter: 0,
@@ -114,9 +179,11 @@ impl CodeGenerator {
             class_meta: HashMap::new(),
             current_type_context: None,
             global_decls: Vec::new(),
-            current_method_context : None,
+            current_method_context: None,
             emitted_tuple_types: std::collections::HashSet::new(),
+            builtins, // AÑADE ESTO AL FINAL
         }
+    
     }
 
     // -----------------------------------------------------------------------
@@ -1026,6 +1093,13 @@ pub fn compile_hulk_program(
         "declare ptr @strcpy(ptr, ptr)".to_string(),
         "declare ptr @strcat(ptr, ptr)".to_string(),
         "declare void @abort() noreturn".to_string(),
+        "".to_string(),
+        "declare double @sqrt(double)".to_string(),
+        "declare double @sin(double)".to_string(),
+        "declare double @cos(double)".to_string(),
+        "declare double @exp(double)".to_string(),
+        "declare double @log(double)".to_string(),
+        "declare i32 @rand()".to_string(),
         "".to_string(),
         "declare i32 @printf(ptr, ...)".to_string(),
         "@.fmt_double = private unnamed_addr constant [4 x i8] c\"%g\\0A\\00\"".to_string(),

@@ -171,6 +171,8 @@ impl Environment {
         self.functions.insert("log".into(),   (vec![num(), num()], num()));
         self.functions.insert("rand".into(),  (vec![], num()));
         self.functions.insert("range".into(), (vec![num(), num()], num()));
+        self.scopes[0].insert("PI".to_string(), InferType::number());
+        self.scopes[0].insert("E".to_string(), InferType::number());
     }
 
     pub fn push_scope(&mut self) { self.scopes.push(HashMap::new()); }
@@ -368,6 +370,7 @@ impl TypeInferrer {
             inference_errors: Vec::new(),
             changed: false,
         }
+        
     }
 
     // ========================================================================
@@ -378,6 +381,7 @@ impl TypeInferrer {
     /// Devuelve `true` si no hubo errores estructurales (no semánticos).
     pub fn infer_program(&mut self, program: &mut Program) -> bool {
         self.register_declarations(program);
+        
 
         for stmt in program.statements.iter_mut() {
             match stmt {
