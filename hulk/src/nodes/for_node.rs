@@ -1,7 +1,7 @@
 use crate::nodes::{expr_node::{Expr, HulkType}, literal_node::LiteralNode};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ForNode {
     pub variable: LiteralNode,
     pub iterator: Box<Expr>,

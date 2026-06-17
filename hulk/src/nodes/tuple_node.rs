@@ -9,7 +9,7 @@ use crate::nodes::expr_node::{Expr, HulkType};
 ///   - Una tupla es un producto de valores heterogéneos con índice numérico de acceso;
 ///     su identidad semántica es distinta y merece nodo propio para que el
 ///     type_inferrer y el codegen puedan tratarla de forma especializada.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TupleNode {
     pub elements: Vec<Expr>,
     pub return_type: HulkType,
@@ -35,7 +35,7 @@ impl TupleNode {
 ///   conocido en tiempo de parseo ("p.0", "p.1").  Guardarlo como usize
 ///   simplifica el codegen (GEP directo) y la verificación semántica
 ///   (basta comparar index < len).
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TupleAccessNode {
     pub tuple: Box<Expr>,
     pub index: usize,

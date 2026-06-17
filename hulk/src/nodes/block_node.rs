@@ -1,7 +1,7 @@
 use crate::nodes::expr_node::{Expr, HulkType};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BlockNode {
     pub expressions: Vec<Expr>,
     pub return_type: HulkType,

@@ -1,6 +1,6 @@
 use crate::nodes::{expr_node::{Expr, HulkType}, funcall_node::FunCallNode, literal_node::LiteralNode};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MemberAccessNode {
     pub instance: Box<Expr>,
     pub member: LiteralNode,
@@ -20,7 +20,7 @@ impl MemberAccessNode {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct MethodCallNode {
     pub instance: Box<Expr>,
     pub call: FunCallNode,

@@ -22,7 +22,7 @@ pub enum BinaryOp {
     SpacedConc,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BinaryOpNode {
     pub left: Box<Expr>,
     pub op: BinaryOp,

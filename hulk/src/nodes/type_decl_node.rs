@@ -1,6 +1,6 @@
 use crate::nodes::{literal_node::LiteralNode, expr_node::{Expr, HulkType}, function_decl_node::FunctionDecl};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AttributeNode {
     pub name: LiteralNode,
     pub type_annotation: HulkType,
@@ -19,7 +19,7 @@ impl AttributeNode {
      
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InheritanceClause {
     pub parent_name: LiteralNode,
     pub parent_args: Option<Vec<Expr>>, // None = heredar argumentos implícitamente
@@ -31,13 +31,14 @@ impl InheritanceClause {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeDeclNode {
     pub name: LiteralNode,
     pub params: Vec<(LiteralNode, HulkType)>,
     pub attributes: Vec<AttributeNode>,
     pub methods: Vec<FunctionDecl>,
     pub inheritance: Option<InheritanceClause>,
+    pub generics: Vec<String>, 
 }
 
 pub enum TypeBodyItem {
@@ -46,11 +47,20 @@ pub enum TypeBodyItem {
 }
 
 impl TypeDeclNode {
-    pub fn new(name: LiteralNode, params: Vec<(LiteralNode, HulkType)>, attributes: Vec<AttributeNode>, methods: Vec<FunctionDecl>) -> Self {
-        Self { name, params, attributes, methods, inheritance: None }
+    pub fn new(name: LiteralNode, params: Vec<(LiteralNode, HulkType)>, attributes: Vec<AttributeNode>, methods: Vec<FunctionDecl>, generics: Vec<String>) -> Self {
+        Self { name, params, attributes, methods, inheritance: None, generics }
     }
 
-    pub fn with_inheritance(name: LiteralNode, params: Vec<(LiteralNode, HulkType)>,attributes: Vec<AttributeNode>,methods: Vec<FunctionDecl>,inheritance: Option<InheritanceClause>) -> Self {
-        Self { name, params,attributes,methods,inheritance }
+    pub fn with_inheritance(
+        name: LiteralNode,
+        generics: Vec<String>,
+        params: Vec<(LiteralNode, HulkType)>,
+        attributes: Vec<AttributeNode>,
+        methods: Vec<FunctionDecl>,
+        inheritance: Option<InheritanceClause>,
+    ) -> Self {
+        Self { name, generics, params, attributes, methods, inheritance }
     }
+
+    pub fn is_generic(&self) -> bool { !self.generics.is_empty() }
 }

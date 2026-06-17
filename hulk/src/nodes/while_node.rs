@@ -1,7 +1,7 @@
 use crate::nodes::expr_node::{Expr, HulkType};
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct WhileNode {
     pub condition: Box<Expr>,
     pub body: Box<Expr>,

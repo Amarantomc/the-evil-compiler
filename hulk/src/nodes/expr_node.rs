@@ -24,11 +24,84 @@ pub enum HulkType {
     String,
     Class(String),
     Tuple(Vec<HulkType>),
+    Param(String),
+    Generic(String, Vec<HulkType>),
     Unknown,
+}
+use std::collections::HashMap;
+
+impl HulkType {
+    /// Reescribe Class(n) -> Param(n) para cada n declarado como genérico.
+    /// Aplica recursivamente a tuplas y genéricos aplicados.
+    pub fn promote_params(&self, generics: &[String]) -> HulkType {
+        match self {
+            HulkType::Class(n) if generics.iter().any(|g| g == n) =>
+                HulkType::Param(n.clone()),
+            HulkType::Tuple(es) =>
+                HulkType::Tuple(es.iter().map(|e| e.promote_params(generics)).collect()),
+            HulkType::Generic(n, args) =>
+                HulkType::Generic(n.clone(),
+                    args.iter().map(|a| a.promote_params(generics)).collect()),
+            other => other.clone(),
+        }
+    }
+
+    /// Sustituye Param(n) por el tipo concreto del mapa. Recursa en tuplas/genéricos.
+    pub fn subst(&self, map: &HashMap<String, HulkType>) -> HulkType {
+        match self {
+            HulkType::Param(n) => map.get(n).cloned().unwrap_or_else(|| self.clone()),
+            HulkType::Tuple(es) =>
+                HulkType::Tuple(es.iter().map(|e| e.subst(map)).collect()),
+            HulkType::Generic(n, args) => {
+                let new_args: Vec<HulkType> = args.iter().map(|a| a.subst(map)).collect();
+                // Si ya no quedan Param dentro, lo dejamos como Generic concreto:
+                // el monomorfizador lo manglará a Class("n__args").
+                HulkType::Generic(n.clone(), new_args)
+            }
+            other => other.clone(),
+        }
+    }
+
+    pub fn contains_param(&self) -> bool {
+        match self {
+            HulkType::Param(_) => true,
+            HulkType::Tuple(es) => es.iter().any(|t| t.contains_param()),
+            HulkType::Generic(_, args) => args.iter().any(|t| t.contains_param()),
+            _ => false,
+        }
+    }
+
+    /// Nombre plano apto para identificadores LLVM (mangling).
+    pub fn mangle(&self) -> String {
+        match self {
+            HulkType::Number      => "Number".into(),
+            HulkType::Bool        => "Bool".into(),
+            HulkType::String      => "String".into(),
+            HulkType::Class(n)    => n.clone(),
+            HulkType::Tuple(es)   => format!(
+                "Tup{}_{}", es.len(),
+                es.iter().map(|t| t.mangle()).collect::<Vec<_>>().join("_")),
+            HulkType::Generic(n, a) => format!(
+                "{}__{}", n,
+                a.iter().map(|t| t.mangle()).collect::<Vec<_>>().join("_")),
+            HulkType::Param(n)    => n.clone(),
+            HulkType::Unknown     => "Unknown".into(),
+        }
+    }
+
+    /// Colapsa Generic(n,args) concreto a Class("n__args") (post-sustitución).
+    pub fn collapse_generic(&self) -> HulkType {
+        match self {
+            HulkType::Generic(_, _) => HulkType::Class(self.mangle()),
+            HulkType::Tuple(es) =>
+                HulkType::Tuple(es.iter().map(|e| e.collapse_generic()).collect()),
+            other => other.clone(),
+        }
+    }
 }
 
 // Representa todo tipo de expresión en el lenguaje
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Let(LetNode),
     If(IfNode),
