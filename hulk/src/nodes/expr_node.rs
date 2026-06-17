@@ -163,4 +163,57 @@ impl Expr {
         }
     }
 }
+fn merge_span(a: (usize, usize), b: (usize, usize)) -> (usize, usize) {
+    let start = match (a.0, b.0) {
+        (0, s) => s,
+        (s, 0) => s,
+        (x, y) => x.min(y),
+    };
+    (start, a.1.max(b.1))
+}
 
+impl Expr {
+    /// Posición `(inicio, fin)` en bytes de esta expresión, derivada
+    /// estructuralmente de sus hojas (los literales llevan span del lexer).
+    /// Devuelve `(0,0)` cuando no hay posición disponible.
+    pub fn span(&self) -> (usize, usize) {
+        match self {
+            Expr::Literal(n) => n.span,
+            Expr::SelfRef => (0, 0),
+            Expr::Binary(n) => merge_span(n.left.span(), n.right.span()),
+            Expr::Unary(n) => n.expr.span(),
+            Expr::Let(n) => {
+                let start = n.assignments.first()
+                    .map(|((id, _), _)| id.span)
+                    .unwrap_or((0, 0));
+                merge_span(start, n.body.span())
+            }
+            Expr::If(n) => merge_span(n.condition.span(), n.else_branch.span()),
+            Expr::While(n) => merge_span(n.condition.span(), n.body.span()),
+            Expr::For(n) => merge_span(n.variable.span, n.body.span()),
+            Expr::Block(n) => {
+                let first = n.expressions.first().map(|e| e.span()).unwrap_or((0, 0));
+                let last  = n.expressions.last().map(|e| e.span()).unwrap_or((0, 0));
+                merge_span(first, last)
+            }
+            Expr::FunCall(n) => n.name.span,
+            Expr::Instantiation(n) => n.name.span,
+            Expr::DestAssign(n) => merge_span(n.target.span(), n.expr.span()),
+            Expr::MemberAccess(n) => merge_span(n.instance.span(), n.member.span),
+            Expr::MethodCall(n) => merge_span(n.instance.span(), n.call.name.span),
+            Expr::BaseCall(args) => {
+                let first = args.first().map(|e| e.span()).unwrap_or((0, 0));
+                let last  = args.last().map(|e| e.span()).unwrap_or((0, 0));
+                merge_span(first, last)
+            }
+            Expr::TypeDowncast(n) => merge_span(n.expr.span(), n.target_type.span),
+            Expr::TypeTest(n) => merge_span(n.expr.span(), n.target_type.span),
+            Expr::Tuple(n) => {
+                let first = n.elements.first().map(|e| e.span()).unwrap_or((0, 0));
+                let last  = n.elements.last().map(|e| e.span()).unwrap_or((0, 0));
+                merge_span(first, last)
+            }
+            Expr::TupleAccess(n) => n.tuple.span(),
+        }
+    }
+}

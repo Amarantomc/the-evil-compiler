@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read};
+use std::{fs::File, io::Read, process::exit};
 
 use lalrpop_util::lalrpop_mod;
 
@@ -37,7 +37,24 @@ pub mod lexer {
     pub mod lexer;
     pub mod token;
 }
-use crate::lexer::lexer::Lexer;
+use crate::{errors::{Diagnostic, Phase, from_parse_error}, lexer::lexer::Lexer};
+pub mod errors;
+
+/// Imprime un diagnóstico a stderr y termina con el código del contrato.
+fn fail(d: Diagnostic) -> ! {
+    eprintln!("{}", d.format());
+    exit(d.phase.exit_code());
+}
+ 
+/// Imprime varios diagnósticos semánticos (una línea por error) y termina con 3.
+fn fail_semantic(src: &str, msgs: &[String]) -> ! {
+    for m in msgs {
+        // Sin spans en el AST todavía -> (0,0), permitido por el contrato.
+        eprintln!("{}", Diagnostic::new(Phase::Semantic, 0, 0, m.clone()).format());
+    }
+    let _ = src;
+    exit(Phase::Semantic.exit_code());
+}
 fn main() {
     let path="test.hulk";
     let mut file = File::open(path).unwrap();
@@ -45,59 +62,37 @@ fn main() {
     file.read_to_string(&mut contents).unwrap();
 
     
-    // ---- 1. Parseo --------------------------------------------------------
+    // ---- 2. Léxico + Sintáctico (un único error de LALRPOP) ----------------
     let parser = grammar::ProgramParser::new();
-let mut program = match parser.parse(Lexer::new(&contents)) {   // <- antes: parser.parse(input)
-    Ok(ast) => ast,
-    Err(e) => {
-        eprintln!("Error de sintaxis: {:?}", e);
-        std::process::exit(1);
-    }
-};
-  
-    // ---- 2. Inferencia de tipos -------------------------------------------
-    // El inferidor anota el AST con HulkType concretos y acumula solo errores
-    // estructurales (e.g. función no encontrada durante la generación de
-    // restricciones, que impediría seguir).
+    let mut program = match parser.parse(Lexer::new(&contents)) {
+        Ok(ast) => ast,
+        Err(e) => fail(from_parse_error(&contents, e)), // decide LEXICAL vs SYNTACTIC
+    };
+ 
+    // ---- 3. Semántico: genéricos (promote/mono) + inferencia + checker -----
     generics::promote::promote_program(&mut program);
-
-let mut mono = generics::mono::Monomorphizer::new();
-mono.run(&mut program);
-if !mono.errors.is_empty() {
-    eprintln!("Errores de monomorfización:");
-    for e in &mono.errors { eprintln!("  - {}", e); }
-    std::process::exit(1);
-}
-    
-let mut inferrer = type_inferrer::TypeInferrer::new();
+ 
+    let mut mono = generics::mono::Monomorphizer::new();
+    mono.run(&mut program);
+    if !mono.errors.is_empty() {
+        fail_semantic(&contents, &mono.errors);
+    }
+ 
+    let mut inferrer = type_inferrer::TypeInferrer::new();
     inferrer.infer_program(&mut program);
-
     if !inferrer.inference_errors.is_empty() {
-        eprintln!("Errores durante la inferencia de tipos:");
-        for e in &inferrer.inference_errors {
-            eprintln!("  - {}", e);
-        }
-        std::process::exit(1);
-}
-
-    // ---- 3. Chequeo semántico ---------------------------------------------
-    // El checker recibe el entorno construido por el inferidor (jerarquía de
-    // tipos, firmas de funciones) y el AST ya anotado, y verifica todas las
-    // reglas semánticas sobre los tipos resueltos.
-    
-    // El entorno se mueve al checker: si necesitaras acceder a él después,
-    // añade un campo público o un getter.
+        fail_semantic(&contents, &inferrer.inference_errors);
+    }
+ 
     let mut checker = semantic::SemanticChecker::new(inferrer.env);
     checker.check_program(&program);
-
     if !checker.errors.is_empty() {
-        eprintln!("Errores semánticos:");
         for e in &checker.errors {
-            eprintln!("  - {}", e);
+            let (line, col) = errors::line_col(&contents, e.offset);
+            eprintln!("{}", Diagnostic::new(Phase::Semantic, line, col, e.message.clone()).format());
         }
-        std::process::exit(1);
+        exit(Phase::Semantic.exit_code());
     }
-
     // ---- 4. Generación de código ------------------------------------------
     println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
      println!("{:#?}", program);

@@ -1,0 +1,11 @@
+type A {
+    x=5;
+    getX()=> self.x;
+}
+type B inherits A {
+    y=5;
+    getX()=> base() + self.y;
+}
+
+let x= new B()in print(x.getX());
+

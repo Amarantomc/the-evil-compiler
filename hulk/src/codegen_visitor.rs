@@ -614,7 +614,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                     0
                 });
 
-         let return_type = self.get_vtable_slot(&method_name,slot_index).map(|s| s.return_type.clone()).unwrap_or_else(|| "ptr".to_string());
+         let return_type = self.get_vtable_slot(&type_name, slot_index)
+    .map(|s| s.return_type.clone())
+    .unwrap_or_else(|| "ptr".to_string());
                 
  
         let res_reg = self.next_temp();
