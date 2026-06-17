@@ -1,4 +1,3 @@
-
 use std::fs;
 use std::collections::HashMap;
 use crate::nodes::function_decl_node::FunctionDecl;
@@ -318,6 +317,20 @@ impl CodeGenerator {
             HulkType::Unknown  => "ptr".to_string(), //Medida de seguridad 
             HulkType::Tuple(elems) => format!("%{}", Self::tuple_struct_name(elems)),
         }
+    }
+
+    /// Determina si un tipo LLVM (representado como string, con o sin '%'
+    /// inicial) corresponde a una tupla generada por `tuple_struct_name`.
+    ///
+    /// Por qué es necesaria:
+    ///   A diferencia de las instancias de clase (que siempre viven en el
+    ///   heap y se manejan como `ptr`), las tuplas son tipos struct *por
+    ///   valor*: se pasan en parámetros de función como `%Tuple_x_y %v`
+    ///   (no como puntero) y se cargan/almacenan con su tipo LLVM real.
+    ///   Varios puntos del codegen necesitan esta distinción para no tratar
+    ///   una tupla como si fuera un puntero genérico.
+    pub fn is_tuple_llvm_type(ty: &str) -> bool {
+        ty.trim_start_matches('%').starts_with("Tuple_")
     }
 
     pub fn tuple_struct_name(elems: &[HulkType]) -> String {
@@ -741,20 +754,18 @@ fn compile_type_decl(generator: &mut CodeGenerator, decl: &mut TypeDeclNode) {
             field_ptr, type_name, self_ptr, struct_idx
         ));
 
-        match field_llvm_ty.as_str() {
-            "double"| "i1"  => {
-                generator.emit(format!(
-                    "store {} {}, ptr {}",
-                    field_llvm_ty, init_val.register, field_ptr
-                ));
-            }
-            _ => {
-                generator.emit(format!(
-                    "store ptr {}, ptr {}", init_val.register, field_ptr
-                ));
-            }
-            
-        }
+        // Nota: NO podemos asumir "ptr" para cualquier tipo distinto de
+        // double/i1. Las tuplas son tipos struct *por valor* (su
+        // field_llvm_ty real es algo como "%Tuple_double_double") y deben
+        // almacenarse con ese tipo real, igual que ya hace @T_init_fields
+        // más abajo. Sólo los tipos verdaderamente representados como
+        // puntero (clases, strings) usan "ptr", y hulk_type_to_llvm ya los
+        // resuelve a "ptr" directamente, así que basta con usar
+        // field_llvm_ty de forma incondicional.
+        generator.emit(format!(
+            "store {} {}, ptr {}",
+            field_llvm_ty, init_val.register, field_ptr
+        ));
     }
  
     generator.pop_scope();
