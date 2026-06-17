@@ -38,6 +38,8 @@ fn main() {
     let mut file = File::open(path).unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
+
+    
     // ---- 1. Parseo --------------------------------------------------------
     let parser = grammar::ProgramParser::new();
     let mut program = match parser.parse(&contents) {
@@ -47,7 +49,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-
+  
     // ---- 2. Inferencia de tipos -------------------------------------------
     // El inferidor anota el AST con HulkType concretos y acumula solo errores
     // estructurales (e.g. función no encontrada durante la generación de
@@ -93,7 +95,7 @@ let mut inferrer = type_inferrer::TypeInferrer::new();
 
     // ---- 4. Generación de código ------------------------------------------
     println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
-    println!("{:#?}", program);
+     println!("{:#?}", program);
 
     match codegen::compile_hulk_program(&mut program, "hulk_module", Some("output.ll")) {
         Ok(_)  => println!("LLVM IR generado exitosamente."),

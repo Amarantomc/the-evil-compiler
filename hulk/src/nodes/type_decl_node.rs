@@ -53,13 +53,13 @@ impl TypeDeclNode {
 
     pub fn with_inheritance(
         name: LiteralNode,
-        generics: Vec<String>,
         params: Vec<(LiteralNode, HulkType)>,
         attributes: Vec<AttributeNode>,
         methods: Vec<FunctionDecl>,
         inheritance: Option<InheritanceClause>,
+        generics: Vec<String>,
     ) -> Self {
-        Self { name, generics, params, attributes, methods, inheritance }
+        Self { name, params, attributes, methods, inheritance, generics }
     }
 
     pub fn is_generic(&self) -> bool { !self.generics.is_empty() }

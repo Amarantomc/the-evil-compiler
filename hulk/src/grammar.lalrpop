@@ -59,7 +59,7 @@ MethodDecl: FunctionDecl = {
 };
 
 TypeDecl: TypeDeclNode = {
-    "type" <name:Ident> <g:GenericParams?> <params:("(" <Comma<Param>> ")")?>
+    "type" <name:Ident> <g:GenericParams?>  <params:("(" <Comma<Param>> ")")?>
         <inheritance:InheritanceClause?> "{" <body:TypeBodyItem*> "}" => {
         let mut attributes = Vec::new();
         let mut methods = Vec::new();
@@ -70,9 +70,10 @@ TypeDecl: TypeDeclNode = {
             }
         }
         TypeDeclNode::with_inheritance(
-            name, g.unwrap_or_default(), params.unwrap_or(vec![]),
-            attributes, methods, inheritance)
+            name, params.unwrap_or(vec![]),
+            attributes, methods, inheritance, g.unwrap_or(vec![]))
     }
+    
 };
 
 InheritanceClause: InheritanceClause = {
