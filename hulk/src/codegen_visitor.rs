@@ -20,7 +20,18 @@ use crate::nodes::literal_node::Literal;
 impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
     fn visit_number(&mut self, n: f32) -> GeneratorResult {
-        GeneratorResult::new(n.to_string(), "double".to_string())
+        // LLVM IR exige que las constantes de tipo `double` tengan notación
+        // decimal (o exponencial/hex-float); un literal entero "puro" como
+        // "3" es rechazado con "integer constant must have integer type".
+        // `f32::to_string()` omite el ".0" para valores enteros (3.0 -> "3"),
+        // así que forzamos siempre al menos un decimal.
+        let text = n.to_string();
+        let text = if text.contains('.') || text.contains('e') || text.contains('E') {
+            text
+        } else {
+            format!("{}.0", text)
+        };
+        GeneratorResult::new(text, "double".to_string())
     }
 
     fn visit_bool(&mut self, b: bool) -> GeneratorResult {
@@ -135,11 +146,16 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             if let Literal::Id(name) = &name_node.value {
                 let ptr = self.next_temp();
                 match hulk_type {
-                    HulkType::Class(_) | HulkType::Tuple(_) => {
+                    HulkType::Class(_) => {
                         self.emit(format!("{} = alloca ptr", ptr));
                         self.emit(format!("store ptr {}, ptr {}", val.register, ptr));
                     }
                     _ => {
+                        // Tuplas (y el resto de tipos por valor) usan su
+                        // tipo LLVM real, no "ptr": val.register ya
+                        // contiene el valor del struct (ver visit_tuple),
+                        // igual que ocurre con los parámetros de función
+                        // que reciben tuplas por valor.
                         self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
                         self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, ptr));
                     }
@@ -158,7 +174,15 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             let res_reg = self.next_temp();
             match ty.as_str() {
                 "double" | "i1" => self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr)),
-                _               => self.emit(format!("{} = load ptr, ptr {}", res_reg, ptr)),
+                // Las tuplas son tipos struct por valor: el alloca que las
+                // respalda fue creado con su tipo real (ver el manejo de
+                // parámetros de constructor/método y el `visit_let` de
+                // arriba), así que deben cargarse con ese mismo tipo, no
+                // como "ptr" genérico.
+                t if CodeGenerator::is_tuple_llvm_type(t) => {
+                    self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr))
+                }
+                _ => self.emit(format!("{} = load ptr, ptr {}", res_reg, ptr)),
             }
             GeneratorResult::new(res_reg, ty)
         } else {
@@ -379,7 +403,11 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         if let Literal::Id(type_name) = &node.name.value {
             let res_reg = self.next_temp();
             let arg_strings: Vec<String> = args.iter()
-                .map(|a|  if a.llvm_type == "double" || a.llvm_type == "i1" {
+                .map(|a| if a.llvm_type == "double" || a.llvm_type == "i1"
+                        || CodeGenerator::is_tuple_llvm_type(&a.llvm_type) {
+                    // Tipos por valor (primitivos y tuplas): se pasan con
+                    // su tipo LLVM real, igual que el constructor los
+                    // declara en su firma (ver `effective_ctor_params`).
                     format!("{} {}", a.llvm_type, a.register)
                 } else {
                     format!("ptr {}", a.register)
@@ -744,7 +772,15 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, slot_ptr));
         }
  
-        GeneratorResult::new(tuple_ptr, llvm_struct_ty)
+        // Las tuplas son tipos por valor: el resto del codegen (parámetros
+        // de función, asignaciones `let`, retorno de funciones, etc.) las
+        // trata como un struct LLVM real, no como un puntero. Por eso
+        // cargamos el struct completo desde el alloca temporal antes de
+        // devolverlo, en vez de exponer `tuple_ptr` directamente.
+        let tuple_val = self.next_temp();
+        self.emit(format!("{} = load {}, ptr {}", tuple_val, llvm_struct_ty, tuple_ptr));
+ 
+        GeneratorResult::new(tuple_val, llvm_struct_ty)
     }
     
     fn visit_tuple_access(&mut self, node: &mut TupleAccessNode) -> GeneratorResult {
@@ -752,10 +788,20 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
  
         let elem_llvm_ty = CodeGenerator::hulk_type_to_llvm(&node.return_type);
  
+        // tuple_res.register contiene el VALOR del struct (no un puntero,
+        // ver visit_tuple), así que para poder indexarlo con `getelementptr`
+        // necesitamos primero materializarlo en memoria con un alloca.
+        let tmp_ptr = self.next_temp();
+        self.emit(format!("{} = alloca {}", tmp_ptr, tuple_res.llvm_type));
+        self.emit(format!(
+            "store {} {}, ptr {}",
+            tuple_res.llvm_type, tuple_res.register, tmp_ptr
+        ));
+ 
         let slot_ptr = self.next_temp();
         self.emit(format!(
             "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {} ; acceso .{}",
-            slot_ptr, tuple_res.llvm_type, tuple_res.register, node.index, node.index
+            slot_ptr, tuple_res.llvm_type, tmp_ptr, node.index, node.index
         ));
  
         let val_reg = self.next_temp();

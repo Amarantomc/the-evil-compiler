@@ -30,14 +30,18 @@ pub mod nodes {
 
 fn main() {
     let input = "
-    type Point(x) {
+    type Line (x,y) {
     x = x;
-    
+    y =y;
 
-    getX() => self.x.0;
-
+    DotProduct() => self.x.0 * self.y.0 + self.x.1 * self.y.1;
+    SetX(x) => self.x := x;
+    GetX() => self.x.0;
 }
-    let x = new Point((3,4)) in print(x.getX());
+    let x = new Line((3,4),(5,5)) in 
+    {
+    print(x.DotProduct());
+    };
     ";
 
     // ---- 1. Parseo --------------------------------------------------------
