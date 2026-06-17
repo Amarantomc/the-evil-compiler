@@ -318,10 +318,11 @@ PowOpcode: BinaryOp = {
 };
 
 Term: Expr = {
-    Num => Expr::Literal(LiteralNode::new(Literal::Number(<>))),
-    "true"  => Expr::Literal(LiteralNode::new(Literal::Bool(true))),
-    "false" => Expr::Literal(LiteralNode::new(Literal::Bool(false))),
-    StringLit => Expr::Literal(LiteralNode::new(Literal::Str(<>))),
+   <l:@L> <n:Num> <r:@R> => Expr::Literal(LiteralNode::new_spanned(Literal::Number(n), (l, r))),
+    <l:@L> "true"  <r:@R> => Expr::Literal(LiteralNode::new_spanned(Literal::Bool(true), (l, r))),
+    <l:@L> "false" <r:@R> => Expr::Literal(LiteralNode::new_spanned(Literal::Bool(false), (l, r))),
+    <l:@L> <s:StringLit> <r:@R> => Expr::Literal(LiteralNode::new_spanned(Literal::Str(s), (l, r))),
+
     "new" <id:Ident> <ta:TurboArgs?> "(" <args:Comma<SimpleExpr>> ")" => {
     let node = match ta {
         Some(targs) => FunCallNode::with_type_args(id, targs, args),
@@ -351,8 +352,9 @@ Term: Expr = {
     "base" "(" <args:Comma<SimpleExpr>> ")" => Expr::BaseCall(args),
     "self" => Expr::SelfRef,
     <id:Ident> => Expr::Literal(id),
+     
 };
-
+  
 
 FunCall: FunCallNode = {
     <id:Ident> <ta:TurboArgs?> "(" <args:Comma<SimpleExpr>> ")" => {
@@ -374,7 +376,7 @@ Num: f32 = {
 
 StringLit: String = { <s:"string"> => s };
 
-Ident: LiteralNode = { <s:"ident"> => LiteralNode::new(Literal::Id(s)) };
+Ident: LiteralNode = { <l:@L> <s:"ident"> <r:@R> => LiteralNode::new_spanned(Literal::Id(s), (l, r)) };
 
 extern {
     type Location = usize;

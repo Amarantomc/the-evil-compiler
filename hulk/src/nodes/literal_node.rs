@@ -2,11 +2,15 @@
 #[derive(Debug, Clone)]
 pub struct LiteralNode {
     pub value: Literal,
+    pub span: (usize, usize),
 }
 
 impl LiteralNode {
-    pub fn new(value: Literal) -> Self {
-        LiteralNode { value }
+     pub fn new(value: Literal) -> Self {
+        LiteralNode { value, span: (0, 0) }
+    }
+    pub fn new_spanned(value: Literal, span: (usize, usize)) -> Self {
+        LiteralNode { value, span }
     }
 }
 

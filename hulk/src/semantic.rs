@@ -68,9 +68,17 @@ use crate::type_inferrer::Environment;
 // Chequedor semántico
 // ============================================================================
 
+/// Error semántico con posición opcional (offset de byte en el fuente).
+/// `offset == 0` significa "sin posición sensata" → se reportará como (0,0).
+#[derive(Debug, Clone)]
+pub struct SemError {
+    pub offset: usize,
+    pub message: String,
+}
+
 pub struct SemanticChecker {
     /// Errores semánticos encontrados.
-    pub errors: Vec<String>,
+    pub errors: Vec<SemError>,
     /// Referencia al entorno construido por el inferidor (tipos y funciones).
     /// El checker lo recibe tras la inferencia y lo usa en modo solo-lectura
     /// para verificar jerarquía, aridad, etc.
@@ -135,7 +143,7 @@ impl SemanticChecker {
         let body_ty = self.type_of(& decl.body);
         let ret_ty  = &decl.return_type;
         if !self.conforms(&body_ty, ret_ty) {
-            self.errors.push(format!(
+            self.err(format!(
                 "Función '{}': el cuerpo tiene tipo {:?} pero se declaró retorno {:?}.",
                 fn_name, body_ty, ret_ty
             ));
@@ -169,7 +177,7 @@ impl SemanticChecker {
 
             if *attr_ty != HulkType::Unknown && !self.conforms(&init_ty, attr_ty) {
                 let attr_name = attr.name.value.as_id();
-                self.errors.push(format!(
+                self.err(format!(
                     "Atributo '{}::{}': el inicializador tiene tipo {:?} pero se declaró {:?}.",
                     type_name, attr_name, init_ty, attr_ty
                 ));
@@ -197,7 +205,7 @@ impl SemanticChecker {
             let ret_ty  = &method.return_type;
 
             if *ret_ty != HulkType::Unknown && !self.conforms(&body_ty, ret_ty) {
-                self.errors.push(format!(
+                self.err(format!(
                     "Método '{}::{}': el cuerpo tiene tipo {:?} pero se declaró retorno {:?}.",
                     type_name, method_name, body_ty, ret_ty
                 ));
@@ -216,10 +224,20 @@ impl SemanticChecker {
 
     fn check_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Literal(_) => {}
+            Expr::Literal(lit) => {
+                // Una referencia a identificador en posición de expresión es
+                // una variable: debe estar declarada en algún scope.
+                if let Literal::Id(ref name) = lit.value {
+                    if self.lookup_var(name).is_none() {
+                        self.err_at(lit.span.0, format!(
+                            "Error semántico: variable '{}' no declarada.", name
+                        ));
+                    }
+                }
+            }
             Expr::SelfRef => {
                 if self.self_type.is_none() {
-                    self.errors.push(
+                    self.err(
                         "Error semántico: 'self' usado fuera de un tipo.".to_string()
                     );
                 }
@@ -234,29 +252,29 @@ impl SemanticChecker {
                 match &node.op {
                     BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul
                     | BinaryOp::Div | BinaryOp::Mod | BinaryOp::Pow => {
-                        self.expect_type(&lt, &HulkType::Number, "operando izquierdo de aritmética");
-                        self.expect_type(&rt, &HulkType::Number, "operando derecho de aritmética");
+                        self.expect_type(&lt, &HulkType::Number, node.left.span().0, "operando izquierdo de aritmética");
+                        self.expect_type(&rt, &HulkType::Number, node.right.span().0, "operando derecho de aritmética");
                     }
                     BinaryOp::Great | BinaryOp::Less
                     | BinaryOp::Gequa | BinaryOp::Lequa => {
-                        self.expect_type(&lt, &HulkType::Number, "operando izquierdo de comparación");
-                        self.expect_type(&rt, &HulkType::Number, "operando derecho de comparación");
+                        self.expect_type(&lt, &HulkType::Number, node.left.span().0, "operando izquierdo de comparación");
+                        self.expect_type(&rt, &HulkType::Number, node.right.span().0, "operando derecho de comparación");
                     }
                     BinaryOp::Equal | BinaryOp::Dist => {
                         if !self.conforms(&lt, &rt) && !self.conforms(&rt, &lt) {
-                            self.errors.push(format!(
+                            self.err_at(node.left.span().0, format!(
                                 "Error de tipo: los operandos de '==' / '!=' tienen tipos incompatibles: {:?} y {:?}.",
                                 lt, rt
                             ));
                         }
                     }
                     BinaryOp::And | BinaryOp::Or => {
-                        self.expect_type(&lt, &HulkType::Bool, "operando izquierdo lógico");
-                        self.expect_type(&rt, &HulkType::Bool, "operando derecho lógico");
+                        self.expect_type(&lt, &HulkType::Bool, node.left.span().0, "operando izquierdo lógico");
+                        self.expect_type(&rt, &HulkType::Bool, node.right.span().0, "operando derecho lógico");
                     }
                    BinaryOp::SingleConc | BinaryOp::SpacedConc => {
-                        self.expect_concatenable(&lt, "operando izquierdo de concatenación");
-                        self.expect_concatenable(&rt, "operando derecho de concatenación");
+                        self.expect_concatenable(&lt, node.left.span().0, "operando izquierdo de concatenación");
+                        self.expect_concatenable(&rt, node.right.span().0, "operando derecho de concatenación");
                     }
                 }
             }
@@ -265,10 +283,10 @@ impl SemanticChecker {
                 let t = self.type_of(&node.expr);
                 match &node.op {
                     UnaryOp::Not => {
-                        self.expect_type(&t, &HulkType::Bool, "operando de '!'");
+                        self.expect_type(&t, &HulkType::Bool, node.expr.span().0, "operando de '!'");
                     }
                     UnaryOp::Neg | UnaryOp::Plus => {
-                        self.expect_type(&t, &HulkType::Number, "operando de negación/positivo");
+                        self.expect_type(&t, &HulkType::Number, node.expr.span().0, "operando de negación/positivo");
                     }
                 }
             }
@@ -283,7 +301,7 @@ impl SemanticChecker {
                     // Si hay anotación explícita, verificar conformidad
                     if *decl_ty != HulkType::Unknown && !self.conforms(&init_ty, decl_ty) {
                         let var_name = id_node.value.as_id();
-                        self.errors.push(format!(
+                        self.err(format!(
                             "Variable '{}': el inicializador tiene tipo {:?} pero se declaró {:?}.",
                             var_name, init_ty, decl_ty
                         ));
@@ -311,14 +329,14 @@ impl SemanticChecker {
             Expr::If(node) => {
                 self.check_expr(&node.condition);
                 let cond_ty = self.type_of(&node.condition);
-                self.expect_type(&cond_ty, &HulkType::Bool, "condición de 'if'");
+                self.expect_type(&cond_ty, &HulkType::Bool, node.condition.span().0, "condición de 'if'");
 
                 self.check_expr(&node.if_branch);
 
                 for (elif_cond, elif_body) in &node.elif_branches {
                     self.check_expr(elif_cond);
                     let ec_ty = self.type_of(elif_cond);
-                    self.expect_type(&ec_ty, &HulkType::Bool, "condición de 'elif'");
+                    self.expect_type(&ec_ty, &HulkType::Bool, elif_cond.span().0, "condición de 'elif'");
                     self.check_expr(elif_body);
                 }
 
@@ -327,7 +345,7 @@ impl SemanticChecker {
             Expr::While(node) => {
                 self.check_expr(&node.condition);
                 let cond_ty = self.type_of(&node.condition);
-                self.expect_type(&cond_ty, &HulkType::Bool, "condición de 'while'");
+                self.expect_type(&cond_ty, &HulkType::Bool, node.condition.span().0, "condición de 'while'");
                 self.check_expr(&node.body);
             }
             Expr::For(node) => {
@@ -348,7 +366,7 @@ impl SemanticChecker {
                 if let Literal::Id(ref fn_name) = node.name.value {
                     match self.env.functions.get(fn_name).cloned() {
                         None => {
-                            self.errors.push(format!(
+                            self.err_at(node.name.span.0, format!(
                                 "Error semántico: función '{}' no declarada.", fn_name
                             ));
                         }
@@ -358,7 +376,7 @@ impl SemanticChecker {
 
                             if !variadic {
                                 if param_tys.len() != node.args.len() {
-                                    self.errors.push(format!(
+                                    self.err_at(node.name.span.0, format!(
                                         "Error de tipo: '{}' espera {} argumento(s), se dieron {}.",
                                         fn_name, param_tys.len(), node.args.len()
                                     ));
@@ -367,7 +385,7 @@ impl SemanticChecker {
                                         let arg_ty = self.type_of(arg);
                                         let expected = self.resolve_infer(param_ty);
                                         if !self.conforms(&arg_ty, &expected) {
-                                            self.errors.push(format!(
+                                            self.err_at(node.name.span.0, format!(
                                                 "Error de tipo en llamada a '{}': se esperaba {:?} pero se obtuvo {:?}.",
                                                 fn_name, expected, arg_ty
                                             ));
@@ -385,7 +403,7 @@ impl SemanticChecker {
                 if let Literal::Id(ref type_name) = node.name.value {
                     match self.env.types.get(type_name).cloned() {
                         None => {
-                            self.errors.push(format!(
+                            self.err_at(node.name.span.0, format!(
                                 "Error semántico: tipo '{}' no declarado.", type_name
                             ));
                         }
@@ -402,7 +420,7 @@ impl SemanticChecker {
                             if !effective_params.is_empty()
                                 && node.args.len() != effective_params.len()
                             {
-                                self.errors.push(format!(
+                                self.err_at(node.name.span.0, format!(
                                     "Error de tipo: constructor de '{}' espera {} arg(s), se dieron {}.",
                                     type_name, effective_params.len(), node.args.len()
                                 ));
@@ -411,7 +429,7 @@ impl SemanticChecker {
                                     let arg_ty  = self.type_of(arg);
                                     let expected = self.resolve_infer(param_ty);
                                     if !self.conforms(&arg_ty, &expected) {
-                                        self.errors.push(format!(
+                                        self.err_at(node.name.span.0, format!(
                                             "Error de tipo en constructor de '{}': se esperaba {:?} pero se obtuvo {:?}.",
                                             type_name, expected, arg_ty
                                         ));
@@ -431,13 +449,13 @@ impl SemanticChecker {
                         if let Literal::Id(ref var_name) = lit.value {
                             match self.lookup_var(var_name) {
                                 None => {
-                                    self.errors.push(format!(
+                                    self.err_at(lit.span.0, format!(
                                         "Error semántico: variable '{}' no declarada en ':='.", var_name
                                     ));
                                 }
                                 Some(declared_ty) => {
                                     if !self.conforms(&val_ty, &declared_ty) {
-                                        self.errors.push(format!(
+                                        self.err_at(lit.span.0, format!(
                                             "Error de tipo en ':=': variable '{}' es {:?} pero se asigna {:?}.",
                                             var_name, declared_ty, val_ty
                                         ));
@@ -453,14 +471,14 @@ impl SemanticChecker {
                             if let Literal::Id(ref field_name) = ma.member.value {
                                 match self.env.lookup_field(tn, field_name) {
                                     None => {
-                                        self.errors.push(format!(
+                                        self.err_at(ma.member.span.0, format!(
                                             "Error semántico: '{}' no tiene atributo '{}'.", tn, field_name
                                         ));
                                     }
                                     Some(fi) => {
                                         let field_ty = self.resolve_infer(&fi.infer_type);
                                         if !self.conforms(&val_ty, &field_ty) {
-                                            self.errors.push(format!(
+                                            self.err(format!(
                                                 "Error de tipo: asignación a '{}::{}' espera {:?} pero se obtuvo {:?}.",
                                                 tn, field_name, field_ty, val_ty
                                             ));
@@ -469,13 +487,13 @@ impl SemanticChecker {
                                 }
                             }
                         } else if inst_ty != HulkType::Unknown {
-                            self.errors.push(format!(
+                            self.err(format!(
                                 "Error semántico: acceso a miembro sobre tipo no-clase {:?}.", inst_ty
                             ));
                         }
                     }
                     _ => {
-                        self.errors.push(
+                        self.err(
                             "Error semántico: el lado izquierdo de ':=' debe ser una variable o un campo.".to_string()
                         );
                     }
@@ -489,7 +507,7 @@ impl SemanticChecker {
                     HulkType::Class(tn) => {
                         if let Literal::Id(ref field_name) = node.member.value {
                             if self.env.lookup_field(tn, field_name).is_none() {
-                                self.errors.push(format!(
+                                self.err_at(node.member.span.0, format!(
                                     "Error semántico: '{}' no tiene atributo '{}'.", tn, field_name
                                 ));
                             }
@@ -497,7 +515,7 @@ impl SemanticChecker {
                     }
                     HulkType::Unknown => {} // silencioso: ya fallaron otros checks
                     other => {
-                        self.errors.push(format!(
+                        self.err(format!(
                             "Error semántico: acceso a miembro sobre tipo primitivo {:?}.", other
                         ));
                     }
@@ -514,13 +532,13 @@ impl SemanticChecker {
                         let method_name = node.call.name.value.as_id();
                         match self.env.lookup_method(tn, &method_name) {
                             None => {
-                                self.errors.push(format!(
+                                self.err_at(node.call.name.span.0, format!(
                                     "Error semántico: '{}' no tiene método '{}'.", tn, method_name
                                 ));
                             }
                             Some(mi) => {
                                 if mi.param_types.len() != node.call.args.len() {
-                                    self.errors.push(format!(
+                                    self.err_at(node.call.name.span.0, format!(
                                         "Error de tipo: '{}::{}' espera {} arg(s), se dieron {}.",
                                         tn, method_name, mi.param_types.len(), node.call.args.len()
                                     ));
@@ -531,7 +549,7 @@ impl SemanticChecker {
                                         let arg_ty  = self.type_of(arg);
                                         let expected = self.resolve_infer(param_ty);
                                         if !self.conforms(&arg_ty, &expected) {
-                                            self.errors.push(format!(
+                                            self.err_at(node.call.name.span.0, format!(
                                                 "Error de tipo en '{}::{}': se esperaba {:?} pero se obtuvo {:?}.",
                                                 tn, method_name, expected, arg_ty
                                             ));
@@ -543,7 +561,7 @@ impl SemanticChecker {
                     }
                     HulkType::Unknown => {}
                     other => {
-                        self.errors.push(format!(
+                        self.err(format!(
                             "Error semántico: llamada a método sobre tipo primitivo {:?}.", other
                         ));
                     }
@@ -555,14 +573,14 @@ impl SemanticChecker {
                 let self_type = match &self.self_type {
                     Some(t) => t.clone(),
                     None => {
-                        self.errors.push("'base()' fuera de un tipo.".to_string());
+                        self.err("'base()' fuera de un tipo.".to_string());
                         return;
                     }
                 };
                 let method_name = match &self.current_method {
                     Some(m) => m.clone(),
                     None => {
-                        self.errors.push("'base()' fuera de un método.".to_string());
+                        self.err("'base()' fuera de un método.".to_string());
                         return;
                     }
                 };
@@ -572,7 +590,7 @@ impl SemanticChecker {
                 {
                     Some(p) => p,
                     None => {
-                        self.errors.push(format!(
+                        self.err(format!(
                             "'base()' en '{}' que no tiene padre.", self_type
                         ));
                         return;
@@ -580,7 +598,7 @@ impl SemanticChecker {
                 };
 
                 if self.env.lookup_method(&parent_name, &method_name).is_none() {
-                    self.errors.push(format!(
+                    self.err(format!(
                         "El padre '{}' no tiene método '{}'.", parent_name, method_name
                     ));
                 }
@@ -595,7 +613,7 @@ impl SemanticChecker {
                 match &expr_ty {
                     HulkType::Class(_) | HulkType::Unknown => {}
                     other => {
-                        self.errors.push(format!(
+                        self.err(format!(
                             "Error semántico: el operador 'as' no puede aplicarse a tipo primitivo {:?}.",
                             other
                         ));
@@ -605,7 +623,7 @@ impl SemanticChecker {
  
                 // Rule 2: target type must exist.
                 if !self.env.types.contains_key(&target_name) {
-                    self.errors.push(format!(
+                    self.err(format!(
                         "Error semántico: el tipo '{}' usado en 'as' no está declarado.",
                         target_name
                     ));
@@ -621,7 +639,7 @@ impl SemanticChecker {
                         self.env.is_subtype(source_name, &target_name);
  
                     if !source_is_ancestor_of_target && !target_is_ancestor_of_source {
-                        self.errors.push(format!(
+                        self.err(format!(
                             "Error semántico: 'as' entre tipos no relacionados: '{}' y '{}'.",
                             source_name, target_name
                         ));
@@ -642,7 +660,7 @@ impl SemanticChecker {
             match &expr_ty {
                 HulkType::Class(_) | HulkType::Unknown => {}
                 other => {
-                    self.errors.push(format!(
+                    self.err(format!(
                         "Error semántico: el operador 'is' no puede aplicarse a tipo primitivo {:?}.",
                         other
                     ));
@@ -652,7 +670,7 @@ impl SemanticChecker {
             // Rule 2: target type must exist.
             let target_name = node.target_type.value.as_id();
             if !self.env.types.contains_key(&target_name) {
-                self.errors.push(format!(
+                self.err(format!(
                     "Error semántico: el tipo '{}' usado en 'is' no está declarado.",
                     target_name
                 ));
@@ -667,15 +685,15 @@ impl SemanticChecker {
             match &tuple_ty {
                 HulkType::Tuple(elems) => {
                     if node.index >= elems.len() {
-                        self.errors.push(format!(
+                        self.err(format!(
                             "Error semántico: índice de tupla {} fuera de rango (la tupla tiene {} elementos).",
                             node.index, elems.len()
                         ));
                     }
                 }
-                HulkType::Unknown => self.errors.push(format!("Error semántico : inferencia de tipo no resuelta en el simbolo del indice {} ", node.index)), 
+                HulkType::Unknown => self.err(format!("Error semántico : inferencia de tipo no resuelta en el simbolo del indice {} ", node.index)), 
                 other => {
-                    self.errors.push(format!(
+                    self.err(format!(
                         "Error semántico: acceso por índice sobre tipo no-tupla {:?}.", other
                     ));
                 }
@@ -691,6 +709,15 @@ impl SemanticChecker {
 
     fn push_scope(&mut self) { self.scopes.push(HashMap::new()); }
     fn pop_scope(&mut self)  { self.scopes.pop(); }
+
+    /// Registra un error sin posición conocida (se reportará como (0,0)).
+    fn err(&mut self, message: String) {
+        self.errors.push(SemError { offset: 0, message });
+    }
+    /// Registra un error en una posición concreta (offset de byte en el fuente).
+    fn err_at(&mut self, offset: usize, message: String) {
+        self.errors.push(SemError { offset, message });
+    }
 
     fn define_var(&mut self, name: String, ty: HulkType) {
         if let Some(s) = self.scopes.last_mut() { s.insert(name, ty); }
@@ -754,9 +781,9 @@ impl SemanticChecker {
     }
 
     /// Emite un error si `actual` no es exactamente `expected`.
-    fn expect_type(&mut self, actual: &HulkType, expected: &HulkType, ctx: &str) {
+    fn expect_type(&mut self, actual: &HulkType, expected: &HulkType, offset: usize, ctx: &str) {
         if actual != &HulkType::Unknown && actual != expected {
-            self.errors.push(format!(
+            self.err_at(offset, format!(
                 "Error de tipo en {}: se esperaba {:?} pero se obtuvo {:?}.",
                 ctx, expected, actual
             ));
@@ -766,7 +793,7 @@ impl SemanticChecker {
     /// Emite un error si `actual` no conforma a `expected`.
     fn expect_conforms(&mut self, actual: &HulkType, expected: &HulkType, ctx: &str) {
         if actual != &HulkType::Unknown && !self.conforms(actual, expected) {
-            self.errors.push(format!(
+            self.err(format!(
                 "Error de tipo en {}: {:?} no conforma a {:?}.",
                 ctx, actual, expected
             ));
@@ -774,13 +801,13 @@ impl SemanticChecker {
     }
     /// Un operando de `@` / `@@` es válido si tiene representación textual:
     /// String, Number o Bool (o un Unknown aún sin resolver).
-    fn expect_concatenable(&mut self, actual: &HulkType, ctx: &str) {
+    fn expect_concatenable(&mut self, actual: &HulkType, offset: usize, ctx: &str) {
         let ok = matches!(
             actual,
             HulkType::Unknown | HulkType::String | HulkType::Number | HulkType::Bool
         );
         if !ok {
-            self.errors.push(format!(
+            self.err_at(offset, format!(
                 "Error de tipo en {}: {:?} no puede concatenarse (se esperaba String, Number o Bool).",
                 ctx, actual
             ));
