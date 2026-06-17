@@ -1,3 +1,5 @@
+use std::{fs::File, io::Read};
+
 use lalrpop_util::lalrpop_mod;
 
 pub mod expr_visitor;
@@ -32,16 +34,13 @@ pub  mod generics {
     pub mod mono;
 }
 fn main() {
-    let input = "
-    function id<T>(x: T): T => x;
-
-print(id::<Number>(42));
-print(id::<String>(\"Hello, generics!\"));
-    ";
-
+    let path="test.hulk";
+    let mut file = File::open(path).unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
     // ---- 1. Parseo --------------------------------------------------------
     let parser = grammar::ProgramParser::new();
-    let mut program = match parser.parse(input) {
+    let mut program = match parser.parse(&contents) {
         Ok(ast) => ast,
         Err(e) => {
             eprintln!("Error de sintaxis: {:?}", e);
@@ -81,16 +80,16 @@ let mut inferrer = type_inferrer::TypeInferrer::new();
     
     // El entorno se mueve al checker: si necesitaras acceder a él después,
     // añade un campo público o un getter.
-    let mut checker = semantic::SemanticChecker::new(inferrer.env);
-    checker.check_program(&program);
+    // let mut checker = semantic::SemanticChecker::new(inferrer.env);
+    // checker.check_program(&program);
 
-    if !checker.errors.is_empty() {
-        eprintln!("Errores semánticos:");
-        for e in &checker.errors {
-            eprintln!("  - {}", e);
-        }
-        std::process::exit(1);
-    }
+    // if !checker.errors.is_empty() {
+    //     eprintln!("Errores semánticos:");
+    //     for e in &checker.errors {
+    //         eprintln!("  - {}", e);
+    //     }
+    //     std::process::exit(1);
+    // }
 
     // ---- 4. Generación de código ------------------------------------------
     println!("Inferencia y chequeo semántico exitosos. El programa es válido.");

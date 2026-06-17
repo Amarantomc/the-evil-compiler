@@ -170,6 +170,13 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     }
 
     fn visit_id(&mut self, id: &str) -> GeneratorResult {
+        if id == "PI" {
+            return GeneratorResult::new("3.141592653589793".to_string(), "double".to_string());
+        }
+        if id == "E" {
+            return GeneratorResult::new("2.718281828459045".to_string(), "double".to_string());
+        }
+        
         if let Some((ptr, ty)) = self.resolve_variable(id) {
             let res_reg = self.next_temp();
             match ty.as_str() {
@@ -244,37 +251,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         }
 
         if let Literal::Id(name) = &node.name.value {
-            if name == "print" {
-                if let Some(arg) = args.first() {
-                    let res_reg = self.next_temp();
-                    match arg.llvm_type.as_str() {
-                        "double" => {
-                            self.emit(format!(
-                                "{} = call i32 (ptr, ...) @printf(ptr @.fmt_double, double {})",
-                                res_reg, arg.register
-                            ));
-                        }
-                        "i1" => {
-                            let str_ptr = self.next_temp();
-                            self.emit(format!(
-                                "{} = select i1 {}, ptr @.str_true, ptr @.str_false",
-                                str_ptr, arg.register
-                            ));
-                            self.emit(format!(
-                                "{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})",
-                                res_reg, str_ptr
-                            ));
-                        }
-                        _ => {
-                            self.emit(format!(
-                                "{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})",
-                                res_reg, arg.register
-                            ));
-                        }
-                    }
-
-                }
-                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            // 1. ¿Es una función built-in (print, math, etc)?
+            if let Some(builtin_fn) = self.builtins.get(name).copied() {
+                return builtin_fn(self, &args);
             }
 
             let return_type = CodeGenerator::hulk_type_to_llvm(&node.return_type);

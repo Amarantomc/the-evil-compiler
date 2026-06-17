@@ -87,13 +87,16 @@ pub struct SemanticChecker {
 impl SemanticChecker {
     /// Crea un checker a partir del entorno producido por `TypeInferrer`.
     pub fn new(env: Environment) -> Self {
-        Self {
+        let mut checker=Self {
             errors: Vec::new(),
             env,
             self_type: None,
             current_method: None,
             scopes: vec![HashMap::new()],
-        }
+        };
+        checker.scopes[0].insert("PI".to_string(), HulkType::Number);
+        checker.scopes[0].insert("E".to_string(), HulkType::Number);
+        checker
     }
 
     // ========================================================================
