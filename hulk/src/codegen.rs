@@ -111,20 +111,25 @@ impl CodeGenerator {
 
         // --- PRINT ---
         builtins.insert("print".to_string(), |cg, args| {
-            if let Some(arg) = args.first() {
-                let res_reg = cg.next_temp();
-                match arg.llvm_type.as_str() {
-                    "double" => cg.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_double, double {})", res_reg, arg.register)),
-                    "i1" => {
-                        let str_ptr = cg.next_temp();
-                        cg.emit(format!("{} = select i1 {}, ptr @.str_true, ptr @.str_false", str_ptr, arg.register));
-                        cg.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", res_reg, str_ptr));
-                    }
-                    _ => cg.emit(format!("{} = call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", res_reg, arg.register)),
+    match args.first() {
+        Some(arg) => {
+            match arg.llvm_type.as_str() {
+                "double" => cg.emit(format!(
+                    "call i32 (ptr, ...) @printf(ptr @.fmt_double, double {})", arg.register)),
+                "i1" => {
+                    let s = cg.next_temp();
+                    cg.emit(format!("{} = select i1 {}, ptr @.str_true, ptr @.str_false", s, arg.register));
+                    cg.emit(format!("call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", s));
                 }
+                _ => cg.emit(format!(
+                    "call i32 (ptr, ...) @printf(ptr @.fmt_str, ptr {})", arg.register)),
             }
-            GeneratorResult::new("0.0".to_string(), "double".to_string())
-        });
+            // print devuelve su argumento: mismo %registro y mismo tipo LLVM
+            arg.clone()
+        }
+        None => GeneratorResult::new("0".to_string(), "double".to_string()),
+    }
+});
 
         // --- MATEMÁTICAS SIMPLES ---
         builtins.insert("sqrt".to_string(), |cg, args| {

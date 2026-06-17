@@ -76,7 +76,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     }
 
     fn visit_block(&mut self, node: &mut BlockNode) -> GeneratorResult {
-        let mut last_res = GeneratorResult::new("0.0".to_string(), "double".to_string());
+        let mut last_res = GeneratorResult::new("0".to_string(), "double".to_string());
         self.push_scope();
         for expr in &mut node.expressions {
             last_res = expr.accept(self);

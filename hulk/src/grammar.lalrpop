@@ -1,4 +1,4 @@
-use std::str::FromStr;
+
 use crate::nodes::{
     binaryop_node::{BinaryOp, BinaryOpNode},
     block_node::BlockNode,
@@ -20,7 +20,8 @@ use crate::nodes::{
     type_downcast_node::TypeDowncastNode,
     tuple_node::{TupleNode, TupleAccessNode},
 };
-
+use crate::lexer::lexer::{Lexer,LexicalError};
+use crate::lexer::token::Token;
 grammar;
 
 pub Program: Program = {
@@ -362,23 +363,50 @@ FunCall: FunCallNode = {
     },
 };
 
-TupleIndex: usize = {
-    r"[0-9]+" => <>.parse::<usize>().unwrap()
-};
+TupleIndex: usize = { <n:"int"> => n };
 
-Float: f32 = {
-    r"[0-9]+\.[0-9]+" => f32::from_str(<>).unwrap()
-};
+Float: f32 = { <f:"float"> => f };
 
 Num: f32 = {
-    <i: TupleIndex> => i as f32,
-    <f: Float> => f,
+    <i:TupleIndex> => i as f32,
+    <f:Float> => f,
 };
 
-StringLit: String = {
-    r#""[^"]*""# => <>.trim_matches('"').to_string()
-};
+StringLit: String = { <s:"string"> => s };
 
-Ident: LiteralNode = {
-    r"[a-zA-Z_][a-zA-Z0-9_]*" => LiteralNode::new(Literal::Id(<>.to_string())),
-};
+Ident: LiteralNode = { <s:"ident"> => LiteralNode::new(Literal::Id(s)) };
+
+extern {
+    type Location = usize;
+    type Error = LexicalError;
+
+    enum Token {
+        // literales con payload
+        "ident"  => Token::Ident(<String>),
+        "int"    => Token::Int(<usize>),
+        "float"  => Token::Float(<f32>),
+        "string" => Token::Str(<String>),
+
+        // palabras clave
+        "if" => Token::If, "elif" => Token::Elif, "else" => Token::Else,
+        "while" => Token::While, "for" => Token::For, "in" => Token::In,
+        "range" => Token::Range, "let" => Token::Let, "type" => Token::Type,
+        "function" => Token::Function, "inherits" => Token::Inherits,
+        "new" => Token::New, "base" => Token::Base, "self" => Token::SelfKw,
+        "true" => Token::True, "false" => Token::False,
+        "is" => Token::Is, "as" => Token::As,
+        "Number" => Token::KwNumber, "String" => Token::KwString, "Boolean" => Token::KwBoolean,
+
+        // operadores y puntuación
+        "@@" => Token::AtAt, "@" => Token::At,
+        "::" => Token::ColonColon, ":=" => Token::Assign, ":" => Token::Colon,
+        "=>" => Token::FatArrow, "==" => Token::EqEq, "=" => Token::Eq,
+        "!=" => Token::Ne, "!" => Token::Bang,
+        "<=" => Token::Le, "<" => Token::Lt, ">=" => Token::Ge, ">" => Token::Gt,
+        "&&" => Token::AndAnd, "&" => Token::Amp, "||" => Token::OrOr, "|" => Token::Pipe,
+        "+" => Token::Plus, "-" => Token::Minus, "*" => Token::Star,
+        "/" => Token::Slash, "%" => Token::Percent, "^" => Token::Caret,
+        "(" => Token::LParen, ")" => Token::RParen, "{" => Token::LBrace, "}" => Token::RBrace,
+        "," => Token::Comma, ";" => Token::Semi, "." => Token::Dot,
+    }
+}

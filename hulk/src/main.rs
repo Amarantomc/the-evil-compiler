@@ -33,6 +33,11 @@ pub  mod generics {
     pub mod promote;
     pub mod mono;
 }
+pub mod lexer {
+    pub mod lexer;
+    pub mod token;
+}
+use crate::lexer::lexer::Lexer;
 fn main() {
     let path="test.hulk";
     let mut file = File::open(path).unwrap();
@@ -42,13 +47,13 @@ fn main() {
     
     // ---- 1. Parseo --------------------------------------------------------
     let parser = grammar::ProgramParser::new();
-    let mut program = match parser.parse(&contents) {
-        Ok(ast) => ast,
-        Err(e) => {
-            eprintln!("Error de sintaxis: {:?}", e);
-            std::process::exit(1);
-        }
-    };
+let mut program = match parser.parse(Lexer::new(&contents)) {   // <- antes: parser.parse(input)
+    Ok(ast) => ast,
+    Err(e) => {
+        eprintln!("Error de sintaxis: {:?}", e);
+        std::process::exit(1);
+    }
+};
   
     // ---- 2. Inferencia de tipos -------------------------------------------
     // El inferidor anota el AST con HulkType concretos y acumula solo errores
@@ -82,16 +87,16 @@ let mut inferrer = type_inferrer::TypeInferrer::new();
     
     // El entorno se mueve al checker: si necesitaras acceder a él después,
     // añade un campo público o un getter.
-    // let mut checker = semantic::SemanticChecker::new(inferrer.env);
-    // checker.check_program(&program);
+    let mut checker = semantic::SemanticChecker::new(inferrer.env);
+    checker.check_program(&program);
 
-    // if !checker.errors.is_empty() {
-    //     eprintln!("Errores semánticos:");
-    //     for e in &checker.errors {
-    //         eprintln!("  - {}", e);
-    //     }
-    //     std::process::exit(1);
-    // }
+    if !checker.errors.is_empty() {
+        eprintln!("Errores semánticos:");
+        for e in &checker.errors {
+            eprintln!("  - {}", e);
+        }
+        std::process::exit(1);
+    }
 
     // ---- 4. Generación de código ------------------------------------------
     println!("Inferencia y chequeo semántico exitosos. El programa es válido.");
