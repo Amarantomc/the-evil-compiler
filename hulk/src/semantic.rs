@@ -254,9 +254,9 @@ impl SemanticChecker {
                         self.expect_type(&lt, &HulkType::Bool, "operando izquierdo lógico");
                         self.expect_type(&rt, &HulkType::Bool, "operando derecho lógico");
                     }
-                    BinaryOp::SingleConc | BinaryOp::SpacedConc => {
-                        self.expect_conforms(&lt, &HulkType::String, "operando izquierdo de concatenación");
-                        self.expect_conforms(&rt, &HulkType::String, "operando derecho de concatenación");
+                   BinaryOp::SingleConc | BinaryOp::SpacedConc => {
+                        self.expect_concatenable(&lt, "operando izquierdo de concatenación");
+                        self.expect_concatenable(&rt, "operando derecho de concatenación");
                     }
                 }
             }
@@ -769,6 +769,20 @@ impl SemanticChecker {
             self.errors.push(format!(
                 "Error de tipo en {}: {:?} no conforma a {:?}.",
                 ctx, actual, expected
+            ));
+        }
+    }
+    /// Un operando de `@` / `@@` es válido si tiene representación textual:
+    /// String, Number o Bool (o un Unknown aún sin resolver).
+    fn expect_concatenable(&mut self, actual: &HulkType, ctx: &str) {
+        let ok = matches!(
+            actual,
+            HulkType::Unknown | HulkType::String | HulkType::Number | HulkType::Bool
+        );
+        if !ok {
+            self.errors.push(format!(
+                "Error de tipo en {}: {:?} no puede concatenarse (se esperaba String, Number o Bool).",
+                ctx, actual
             ));
         }
     }

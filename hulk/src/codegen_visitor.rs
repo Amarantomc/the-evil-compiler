@@ -59,8 +59,8 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                 // LLVM no tiene pow directo; usamos llvm.pow.f64 o una llamada a libm.
                 (format!("{} = call double @llvm.pow.f64(double {}, double {})", res_reg, l.register, r.register), "double")
             }
-            BinaryOp::Equal => (format!("{} = fcmp oeq double {}, {}", res_reg, l.register, r.register), "i1"),
-            BinaryOp::Dist  => (format!("{} = fcmp une double {}, {}", res_reg, l.register, r.register), "i1"),
+            BinaryOp::Equal => return self.emit_equality(&l, &r, true),
+            BinaryOp::Dist  => return self.emit_equality(&l, &r, false),
             BinaryOp::Great => (format!("{} = fcmp ogt double {}, {}", res_reg, l.register, r.register), "i1"),
             BinaryOp::Less  => (format!("{} = fcmp olt double {}, {}", res_reg, l.register, r.register), "i1"),
             BinaryOp::Gequa => (format!("{} = fcmp oge double {}, {}", res_reg, l.register, r.register), "i1"),
@@ -110,33 +110,55 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(final_val, "double".to_string())
     }
 
-    fn visit_if(&mut self, node: &mut IfNode) -> GeneratorResult {
-        let then_label  = self.next_label("if_then");
-        let else_label  = self.next_label("if_else");
+   fn visit_if(&mut self, node: &mut IfNode) -> GeneratorResult {
         let merge_label = self.next_label("if_merge");
+        // (registro_valor, etiqueta_bloque) de cada rama que cae a merge.
+        let mut incoming: Vec<(String, String)> = Vec::new();
+        let mut phi_ty = String::from("double");
 
+        // ---- rama if ----
+        let then_label = self.next_label("if_then");
+        let mut next_label = self.next_label("if_else");
         let cond = node.condition.accept(self);
-        self.emit(format!("br i1 {}, label %{}, label %{}", cond.register, then_label, else_label));
+        self.emit(format!("br i1 {}, label %{}, label %{}", cond.register, then_label, next_label));
 
-        self.emit_label(then_label.clone());
+        self.emit_label(then_label);
         let then_res = node.if_branch.accept(self);
-        let actual_then_block = self.last_block_label();
+        phi_ty = then_res.llvm_type.clone();
+        let then_blk = self.last_block_label();
         self.emit(format!("br label %{}", merge_label));
+        incoming.push((then_res.register, then_blk));
 
-        self.emit_label(else_label.clone());
+        // ---- ramas elif ----
+        for (econd, ebody) in node.elif_branches.iter_mut() {
+            self.emit_label(next_label.clone());
+            let ethen = self.next_label("if_then");
+            next_label = self.next_label("if_else");
+            let ec = econd.accept(self);
+            self.emit(format!("br i1 {}, label %{}, label %{}", ec.register, ethen, next_label));
+
+            self.emit_label(ethen);
+            let eres = ebody.accept(self);
+            let eblk = self.last_block_label();
+            self.emit(format!("br label %{}", merge_label));
+            incoming.push((eres.register, eblk));
+        }
+
+        // ---- rama else ----
+        self.emit_label(next_label);
         let else_res = node.else_branch.accept(self);
-        let actual_else_block = self.last_block_label();
+        let else_blk = self.last_block_label();
         self.emit(format!("br label %{}", merge_label));
+        incoming.push((else_res.register, else_blk));
 
+        // ---- merge + phi ----
         self.emit_label(merge_label);
         let res_reg = self.next_temp();
-        self.emit(format!(
-            "{} = phi {} [ {}, %{} ], [ {}, %{} ]",
-            res_reg, then_res.llvm_type,
-            then_res.register, actual_then_block,
-            else_res.register, actual_else_block
-        ));
-        GeneratorResult::new(res_reg, then_res.llvm_type)
+        let phi_args: Vec<String> = incoming.iter()
+            .map(|(reg, blk)| format!("[ {}, %{} ]", reg, blk))
+            .collect();
+        self.emit(format!("{} = phi {} {}", res_reg, phi_ty, phi_args.join(", ")));
+        GeneratorResult::new(res_reg, phi_ty)
     }
 
     fn visit_let(&mut self, node: &mut LetNode) -> GeneratorResult {

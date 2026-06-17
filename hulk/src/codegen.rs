@@ -439,7 +439,38 @@ impl CodeGenerator {
     // String concatenation (sin cambios)
     // -----------------------------------------------------------------------
 
+    /// Garantiza que `val` sea un puntero a cadena C (`ptr`).
+    /// - `ptr`    -> ya es cadena, se devuelve tal cual.
+    /// - `double` -> se convierte con snprintf("%g") en un buffer de 32 bytes.
+    /// - `i1`     -> se selecciona entre "true"/"false".
+    pub fn ensure_cstr(&mut self, val: &GeneratorResult) -> GeneratorResult {
+        match val.llvm_type.as_str() {
+            "ptr" => GeneratorResult::new(val.register.clone(), "ptr".to_string()),
+            "double" => {
+                let buf = self.next_temp();
+                self.emit(format!("{} = call ptr @malloc(i64 32)", buf));
+                self.emit(format!(
+                    "call i32 (ptr, i64, ptr, ...) @snprintf(ptr {}, i64 32, ptr @.fmt_g, double {})",
+                    buf, val.register
+                ));
+                GeneratorResult::new(buf, "ptr".to_string())
+            }
+            "i1" => {
+                let p = self.next_temp();
+                self.emit(format!(
+                    "{} = select i1 {}, ptr @.str_true, ptr @.str_false",
+                    p, val.register
+                ));
+                GeneratorResult::new(p, "ptr".to_string())
+            }
+            // Cualquier otro tipo (objetos, tuplas) ya es un puntero.
+            _ => GeneratorResult::new(val.register.clone(), "ptr".to_string()),
+        }
+    }
+
     pub fn emit_single_concat(&mut self, l: &GeneratorResult, r: &GeneratorResult) -> GeneratorResult {
+        let l = self.ensure_cstr(l);   // <- coerción
+        let r = self.ensure_cstr(r);   // <- coerción
         let len_l  = self.next_temp();
         let len_r  = self.next_temp();
         let tot0   = self.next_temp();
@@ -456,6 +487,8 @@ impl CodeGenerator {
     }
 
     pub fn emit_spaced_concat(&mut self, l: &GeneratorResult, r: &GeneratorResult) -> GeneratorResult {
+        let l = self.ensure_cstr(l);   // <- coerción
+        let r = self.ensure_cstr(r);   // <- coerción
         let space_global = "@.str.space".to_string();
         if !self.global_decls.iter().any(|d| d.starts_with(&space_global)) {
             self.global_decls.push(
@@ -479,7 +512,6 @@ impl CodeGenerator {
         self.emit(format!("call ptr @strcat(ptr {}, ptr {})", buf, r.register));
         GeneratorResult::new(buf, "ptr".to_string())
     }
-
     pub fn collect_subtypes(&self, ancestor: &str) -> Vec<String> {
         let mut result = Vec::new();
         for name in self.class_meta.keys() {
@@ -501,6 +533,27 @@ impl CodeGenerator {
             }
         }
         false
+    }
+     
+    pub fn emit_equality(&mut self, l: &GeneratorResult, r: &GeneratorResult, want_equal: bool) -> GeneratorResult {
+        let res_reg = self.next_temp();
+        match l.llvm_type.as_str() {
+            "ptr" => {
+                let cmp = self.next_temp();
+                self.emit(format!("{} = call i32 @strcmp(ptr {}, ptr {})", cmp, l.register, r.register));
+                let pred = if want_equal { "eq" } else { "ne" };
+                self.emit(format!("{} = icmp {} i32 {}, 0", res_reg, pred, cmp));
+            }
+            "i1" => {
+                let pred = if want_equal { "eq" } else { "ne" };
+                self.emit(format!("{} = icmp {} i1 {}, {}", res_reg, pred, l.register, r.register));
+            }
+            _ => {
+                let pred = if want_equal { "oeq" } else { "une" };
+                self.emit(format!("{} = fcmp {} double {}, {}", res_reg, pred, l.register, r.register));
+            }
+        }
+        GeneratorResult::new(res_reg, "i1".to_string())
     }
 }
 
@@ -1092,6 +1145,7 @@ pub fn compile_hulk_program(
         "declare i64 @strlen(ptr)".to_string(),
         "declare ptr @strcpy(ptr, ptr)".to_string(),
         "declare ptr @strcat(ptr, ptr)".to_string(),
+        "declare i32 @strcmp(ptr, ptr)".to_string(),
         "declare void @abort() noreturn".to_string(),
         "".to_string(),
         "declare double @sqrt(double)".to_string(),
@@ -1102,7 +1156,9 @@ pub fn compile_hulk_program(
         "declare i32 @rand()".to_string(),
         "".to_string(),
         "declare i32 @printf(ptr, ...)".to_string(),
+         "declare i32 @snprintf(ptr, i64, ptr, ...)".to_string(),  
         "@.fmt_double = private unnamed_addr constant [4 x i8] c\"%g\\0A\\00\"".to_string(),
+          "@.fmt_g      = private unnamed_addr constant [3 x i8] c\"%g\\00\"".to_string(),
         "@.fmt_str    = private unnamed_addr constant [4 x i8] c\"%s\\0A\\00\"".to_string(),
         "@.str_true   = private unnamed_addr constant [5 x i8] c\"true\\00\"".to_string(),
         "@.str_false  = private unnamed_addr constant [6 x i8] c\"false\\00\"".to_string(),
