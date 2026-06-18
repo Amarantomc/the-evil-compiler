@@ -938,7 +938,7 @@ pub fn compile_hulk_program(
     let mut header: Vec<String> = vec![
         "; ModuleID = 'hulk'".to_string(),
         //"target triple = \"x86_64-pc-linux-gnu\"".to_string(),
-        "target triple = \"x86_64-pc-windows-msvc\"".to_string(),
+        "target triple = \"x86_64-pc-linux-gnu\"".to_string(),
         "".to_string(),
         "declare ptr @malloc(i64)".to_string(),
         "declare i64 @strlen(ptr)".to_string(),
