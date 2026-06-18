@@ -20,11 +20,7 @@ use crate::nodes::literal_node::Literal;
 impl ExprVisitor<GeneratorResult> for CodeGenerator {
 
     fn visit_number(&mut self, n: f32) -> GeneratorResult {
-        // LLVM IR exige que las constantes de tipo `double` tengan notación
-        // decimal (o exponencial/hex-float); un literal entero "puro" como
-        // "3" es rechazado con "integer constant must have integer type".
-        // `f32::to_string()` omite el ".0" para valores enteros (3.0 -> "3"),
-        // así que forzamos siempre al menos un decimal.
+         
         let text = n.to_string();
         let text = if text.contains('.') || text.contains('e') || text.contains('E') {
             text
@@ -173,11 +169,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                         self.emit(format!("store ptr {}, ptr {}", val.register, ptr));
                     }
                     _ => {
-                        // Tuplas (y el resto de tipos por valor) usan su
-                        // tipo LLVM real, no "ptr": val.register ya
-                        // contiene el valor del struct (ver visit_tuple),
-                        // igual que ocurre con los parámetros de función
-                        // que reciben tuplas por valor.
+                        
                         self.emit(format!("{} = alloca {}", ptr, val.llvm_type));
                         self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, ptr));
                     }
@@ -203,11 +195,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             let res_reg = self.next_temp();
             match ty.as_str() {
                 "double" | "i1" => self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr)),
-                // Las tuplas son tipos struct por valor: el alloca que las
-                // respalda fue creado con su tipo real (ver el manejo de
-                // parámetros de constructor/método y el `visit_let` de
-                // arriba), así que deben cargarse con ese mismo tipo, no
-                // como "ptr" genérico.
+                
                 t if CodeGenerator::is_tuple_llvm_type(t) => {
                     self.emit(format!("{} = load {}, ptr {}", res_reg, ty, ptr))
                 }
@@ -234,8 +222,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         match &mut node.target.as_mut() {
             Expr::Literal(lit_node) => {
                 if let Literal::Id(name) = &lit_node.value {
-                    if let Some((ptr, ty)) = self.resolve_variable(name) {
-                        self.emit(format!("store {} {}, ptr {}", ty, val.register, ptr));
+                   if let Some((ptr, ty)) = self.resolve_variable(name) {
+                        let store_ty = CodeGenerator::llvm_operand_type(&ty);
+                        self.emit(format!("store {} {}, ptr {}", store_ty, val.register, ptr));
                     } else {
                         self.emit(format!("; ERROR: variable '{}' no declarada en dest-assign", name));
                     }
@@ -245,13 +234,24 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             Expr::MemberAccess(access) => {
                 let inst_res = access.instance.accept(self);
                 if let Literal::Id(field_name) = &access.member.value {
+                    let mut class = inst_res.llvm_type.trim_start_matches('%').to_string();
+                    if !self.class_meta.contains_key(&class) {
+                        if let HulkType::Class(tn) = access.instance.static_type() {
+                            class = tn;
+                        } else if matches!(access.instance.as_ref(), Expr::SelfRef) {
+                            if let Some(t) = self.current_type_context.clone() { class = t; }
+                        }
+                    }
+                    let class_ty = format!("%{}", class);
+
                     let field_ptr = self.next_temp();
-                    let index = self.get_field_index(&inst_res.llvm_type, field_name);
+                    let index = self.get_field_index(&class_ty, field_name);
                     self.emit(format!(
                         "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {} ; campo {}",
-                        field_ptr, inst_res.llvm_type, inst_res.register, index, field_name
+                        field_ptr, class_ty, inst_res.register, index, field_name
                     ));
-                    self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, field_ptr));
+                    let store_ty = CodeGenerator::llvm_operand_type(&val.llvm_type);
+                    self.emit(format!("store {} {}, ptr {}", store_ty, val.register, field_ptr));
                 }
                 val
             }
@@ -281,8 +281,9 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             let return_type = CodeGenerator::hulk_type_to_llvm(&node.return_type);
             let res_reg = self.next_temp();
             let arg_strings: Vec<String> = args.iter()
-                .map(|a| format!("{} {}", a.llvm_type, a.register))
+                .map(|a| format!("{} {}", CodeGenerator::llvm_operand_type(&a.llvm_type), a.register))
                 .collect();
+             
             self.emit(format!("{} = call {} @{}({})", res_reg, return_type, name, arg_strings.join(", ")));
             return GeneratorResult::new(res_reg, return_type);
         }
@@ -291,9 +292,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
     }
 
      fn visit_for(&mut self, node: &mut ForNode) -> GeneratorResult {
-        // El parser construye el iterador como FunCall("range", [start, end]).
-        // No existe una funcion `range` real; extraemos los dos argumentos
-        // directamente del nodo y generamos un loop con contador en IR.
+         
         let (start_res, end_res) = match &mut node.iterator.as_mut() {
             Expr::FunCall(call) => {
                 if call.args.len() == 2 {
@@ -406,9 +405,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             let arg_strings: Vec<String> = args.iter()
                 .map(|a| if a.llvm_type == "double" || a.llvm_type == "i1"
                         || CodeGenerator::is_tuple_llvm_type(&a.llvm_type) {
-                    // Tipos por valor (primitivos y tuplas): se pasan con
-                    // su tipo LLVM real, igual que el constructor los
-                    // declara en su firma (ver `effective_ctor_params`).
+                    
                     format!("{} {}", a.llvm_type, a.register)
                 } else {
                     format!("ptr {}", a.register)
@@ -423,68 +420,65 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new("null".to_string(), "ptr".to_string())
     }
 
-    /// Lee el valor de un atributo de una instancia.
-    ///
-    /// El índice del campo incluye +1 por el vptr en posición 0.
-    fn visit_member_access(
+     
+       fn visit_member_access(
         &mut self,
         node: &mut MemberAccessNode,
     ) -> GeneratorResult {
         let inst_res = node.instance.accept(self);
-
+ 
         if let Literal::Id(field_name) = &node.member.value {
-            // get_field_index ya suma 1 para saltar el vptr.
-            let field_index = self.get_field_index(&inst_res.llvm_type, field_name);
+             
+            let mut class = inst_res.llvm_type.trim_start_matches('%').to_string();
+            if !self.class_meta.contains_key(&class) {
+                if let crate::nodes::expr_node::HulkType::Class(tn) = node.instance.static_type() {
+                    class = tn;
+                } else if matches!(node.instance.as_ref(), Expr::SelfRef) {
+                    if let Some(t) = self.current_type_context.clone() { class = t; }
+                }
+            }
+ 
+            // Si aún no es una clase conocida, no podemos generar un GEP válido.
+            if !self.class_meta.contains_key(&class) {
+                self.emit(format!(
+                    "; ERROR: receptor de '.{}' sin clase resuelta (llvm_type={})",
+                    field_name, inst_res.llvm_type
+                ));
+                self.emit("call void @abort()".to_string());
+                return GeneratorResult::new("0.0".to_string(), "double".to_string());
+            }
+ 
+            let class_ty = format!("%{}", class);
+            // get_field_index ya suma 1 para saltar el vptr y tiene fallback seguro.
+           let field_index = self.get_field_index(&class_ty, field_name);
             let field_ptr   = self.next_temp();
             let field_val   = self.next_temp();
-            let return_type = self.resolve_variable(&field_name).unwrap().1;
+
+            // Tipo de ALMACENAMIENTO del campo en el struct (lo que se carga):
+            // "double", "i1", "ptr" (clases) o "%Tuple_...". Fallback: "double".
+            let storage_ty = self
+                .collect_all_fields(&class)
+                .into_iter()
+                .find(|(n, _)| n == field_name)
+                .map(|(_, ty)| ty)
+                .unwrap_or_else(|| "double".to_string());
+ 
+            let result_ty = match node.return_type {
+                HulkType::Class(ref name) => name.clone(),
+                _ => storage_ty.clone(),
+            };
 
             self.emit(format!(
-                "{} = getelementptr inbounds {}, ptr {}, i32 0, i32 {}",
-                field_ptr, inst_res.llvm_type, inst_res.register, field_index
+                "{} = getelementptr inbounds %{}, ptr {}, i32 0, i32 {}",
+                field_ptr, class, inst_res.register, field_index
             ));
-            self.emit(format!("{} = load {} , ptr {}", field_val, return_type, field_ptr));
-            return GeneratorResult::new(field_val, return_type);
+            self.emit(format!("{} = load {} , ptr {}", field_val, storage_ty, field_ptr));
+            return GeneratorResult::new(field_val, result_ty);
         }
         GeneratorResult::new("0.0".to_string(), "double".to_string())
     }
 
-    /// Emite una llamada a un método de instancia usando despacho indirecto
-    /// a través de la VTable.
-    ///
-    /// # Secuencia de instrucciones emitidas
-    ///
-    /// ```text
-    ///   ; 1. Leer el vptr del objeto (campo 0 del struct)
-    ///   %vptr_field = getelementptr inbounds %T, ptr %obj, i32 0, i32 0
-    ///   %vptr       = load ptr, ptr %vptr_field
-    ///
-    ///   ; 2. Leer el function pointer del slot correcto de la VTable
-    ///   %fn_slot    = getelementptr inbounds %VTable_T, ptr %vptr, i32 0, i32 <slot>
-    ///   %fn_ptr     = load ptr, ptr %fn_slot
-    ///
-    ///   ; 3. Llamada indirecta (polimórfica)
-    ///   %result     = call double %fn_ptr(ptr %obj, <args...>)
-    /// ```
-    ///
-    /// # Por qué despacho indirecto y no una llamada directa
-    ///
-    /// Con una llamada directa (`call double @Animal_speak(...)`) el compilador
-    /// fijaría en tiempo de compilación qué función se ejecuta.  Si el objeto
-    /// es en realidad un `Dog` (hijo de `Animal`), se ejecutaría la versión
-    /// equivocada.  El despacho a través del vptr lee la función *real* del
-    /// objeto en tiempo de ejecución, que en el caso de un `Dog` apuntará a
-    /// `@Dog_speak`.  Esto es exactamente lo que permite el polimorfismo.
-    ///
-    /// # Por qué necesitamos el tipo estático (`inst_res.llvm_type`)
-    ///
-    /// Solo usamos el tipo estático para:
-    ///   a) Calcular el índice del slot en la VTable (invariante entre padre
-    ///      e hijo gracias a build_vtable_for_class).
-    ///   b) Emitir el GEP del vptr con el tipo LLVM correcto del struct.
-    ///
-    /// El tipo *dinámico* real se resuelve solo en tiempo de ejecución a
-    /// través del contenido del vptr.
+    
     fn visit_method_call(
         &mut self,
         node: &mut MethodCallNode,
@@ -497,22 +491,21 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             arg_results.push(arg_expr.accept(self));
         }
 
-        if let Literal::Id(method_name) = &node.call.name.value {
-            // ---- 1.  Resolver el slot de la vtable para este método -------
-            //
-            // Usamos el tipo *estático* de la instancia (conocido en compile
-            // time) para encontrar el índice del slot.  Gracias a que
-            // build_vtable_for_class preserva el orden del padre, este índice
-            // es válido también cuando el tipo dinámico es un subtipo.
-            let type_name_raw = inst_res.llvm_type.trim_start_matches('%').to_string();
+        if let Literal::Id(method_name) = &node.call.name.value { 
+            let mut type_name_raw = inst_res.llvm_type.trim_start_matches('%').to_string();
+            if !self.class_meta.contains_key(&type_name_raw) {
+                if let HulkType::Class(tn) = node.instance.static_type() {
+                    type_name_raw = tn;
+                } else if matches!(node.instance.as_ref(), Expr::SelfRef) {
+                    if let Some(t) = self.current_type_context.clone() {
+                        type_name_raw = t;
+                    }
+                }
+            }
 
-            let slot_index = self
-                .get_vtable_slot_index(&type_name_raw, method_name)
-                .unwrap_or_else(|| {
-                    // Fallback: si no encontramos el slot (error semántico ya reportado),
-                    // usamos 0 para generar IR sintácticamente válido.
-                    0
-                });
+    let slot_index = self
+        .get_vtable_slot_index(&type_name_raw, method_name)
+        .unwrap_or_else(|| 0);
 
             // ---- 2.  Leer vptr del objeto (campo 0) -----------------------
             let vptr_field = self.next_temp();
@@ -550,8 +543,10 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
                 .map(|s| s.return_type.clone())
                 .unwrap_or_else(|| CodeGenerator::hulk_type_to_llvm(&node.return_type));
 
-            let mut all_args = vec![format!("ptr {}", inst_res.register)];
-            all_args.extend(arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register)));
+           let mut all_args = vec![format!("ptr {}", inst_res.register)];
+            all_args.extend(arg_results.iter().map(|a| {
+                format!("{} {}", CodeGenerator::llvm_operand_type(&a.llvm_type), a.register)
+            }));
 
             self.emit(format!(
                 "{} = call {} {}({})",
@@ -604,15 +599,12 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         
         let mut all_args = vec![format!("ptr {}", self_reg)];
         all_args.extend(
-            arg_results.iter().map(|a| format!("{} {}", a.llvm_type, a.register))
+            arg_results.iter().map(|a| format!("{} {}", CodeGenerator::llvm_operand_type(&a.llvm_type), a.register))
         );
+
         let slot_index = self
                 .get_vtable_slot_index(&type_name, &method_name)
-                .unwrap_or_else(|| {
-                    // Fallback: si no encontramos el slot (error semántico ya reportado),
-                    // usamos 0 para generar IR sintácticamente válido.
-                    0
-                });
+                .unwrap_or_else(|| {0 });
 
          let return_type = self.get_vtable_slot(&type_name, slot_index)
     .map(|s| s.return_type.clone())
@@ -740,13 +732,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         let mut elem_results: Vec<GeneratorResult> = Vec::new();
         for elem in &mut node.elements {
             elem_results.push(elem.accept(self));
-        }
- 
-        // El tipo de la tupla ya fue resuelto por el type_inferrer y vive
-        // en node.return_type. Si por alguna razón quedó Unknown en algún
-        // elemento (programa con error semántico ya reportado), usamos el
-        // tipo LLVM real obtenido al evaluar cada elemento para no romper
-        // la generación de IR.
+        } 
         let elem_hulk_types: Vec<HulkType> = if let HulkType::Tuple(ref types) = node.return_type {
             types.clone()
         } else {
@@ -774,12 +760,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
             ));
             self.emit(format!("store {} {}, ptr {}", val.llvm_type, val.register, slot_ptr));
         }
- 
-        // Las tuplas son tipos por valor: el resto del codegen (parámetros
-        // de función, asignaciones `let`, retorno de funciones, etc.) las
-        // trata como un struct LLVM real, no como un puntero. Por eso
-        // cargamos el struct completo desde el alloca temporal antes de
-        // devolverlo, en vez de exponer `tuple_ptr` directamente.
+  
         let tuple_val = self.next_temp();
         self.emit(format!("{} = load {}, ptr {}", tuple_val, llvm_struct_ty, tuple_ptr));
  
@@ -791,9 +772,7 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
  
         let elem_llvm_ty = CodeGenerator::hulk_type_to_llvm(&node.return_type);
  
-        // tuple_res.register contiene el VALOR del struct (no un puntero,
-        // ver visit_tuple), así que para poder indexarlo con `getelementptr`
-        // necesitamos primero materializarlo en memoria con un alloca.
+         
         let tmp_ptr = self.next_temp();
         self.emit(format!("{} = alloca {}", tmp_ptr, tuple_res.llvm_type));
         self.emit(format!(
