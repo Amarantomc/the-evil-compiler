@@ -85,7 +85,7 @@ InheritanceClause: InheritanceClause = {
 };
 
 TypeBodyItem: TypeBodyItem = {
-    <id:AnyId> <ty:TypeAnnotation?> "=" <expr:ConcExpr> ";" => {
+    <id:VarIdent> <ty:TypeAnnotation?> "=" <expr:ConcExpr> ";" => {
         TypeBodyItem::Assignment(AttributeNode::new(id, ty.unwrap_or(HulkType::Unknown), expr))
     },
     <MethodDecl> => TypeBodyItem::FunctionDecl(<>),
@@ -126,7 +126,7 @@ Type: HulkType = {
     "String"  => HulkType::String,
     "Boolean" => HulkType::Bool,
     // Tipo aplicado: Box<Number>, Pair<Number, String>
-    <id:AnyId> "<" <args:Comma1<Type>> ">" =>
+    <id:Ident> "<" <args:Comma1<Type>> ">" =>
         HulkType::Generic(id.value.as_id(), args),
     <id:Ident> => HulkType::Class(id.value.as_id()),
     "(" <t1:Type> "," <rest:Comma1<Type>> ")" => {
@@ -207,7 +207,7 @@ WhileExpr: Expr = {
 };
 
 ForExpr: Expr = {
-    "for" "(" <var:AnyId> "in" "range" "(" <iter1:OrExpr> "," <iter2:OrExpr> ")" ")" <body:ExprRule> => {
+    "for" "(" <var:VarIdent> "in" "range" "(" <iter1:OrExpr> "," <iter2:OrExpr> ")" ")" <body:ExprRule> => {
         let iter = Expr::FunCall(FunCallNode::new(LiteralNode::new(Literal::Id("range".to_string())), vec![iter1, iter2]));
         Expr::For(ForNode::new(var, iter, body))
     },
@@ -267,12 +267,12 @@ CompOpcode: BinaryOp = {
 };
 
 pub IsExpr: Expr = {
-    <l:IsExpr> "is" <r:VarIdent> => Expr::TypeTest(TypeTestNode::new(l, r)),
+    <l:IsExpr> "is" <r:Ident> => Expr::TypeTest(TypeTestNode::new(l, r)),
     AsExpr,
 };
 
 pub AsExpr: Expr = {
-    <l:AsExpr> "as" <r:VarIdent> => Expr::TypeDowncast(TypeDowncastNode::new(l, r)),
+    <l:AsExpr> "as" <r:Ident> => Expr::TypeDowncast(TypeDowncastNode::new(l, r)),
     ArithExpr,
 };
 
@@ -338,7 +338,7 @@ Term: Expr = {
     <inst:Term> "." <call:FunCall> => {
         Expr::MethodCall(MethodCallNode::new(inst, call))
     },
-    <inst:Term> "." <member:AnyId> => {
+    <inst:Term> "." <member:VarIdent> => {
         Expr::MemberAccess(MemberAccessNode::new(inst, member))
     },
     <FunCall> => Expr::FunCall(<>),
