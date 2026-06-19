@@ -85,7 +85,7 @@ InheritanceClause: InheritanceClause = {
 };
 
 TypeBodyItem: TypeBodyItem = {
-    <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> ";" => {
+    <id:AnyId> <ty:TypeAnnotation?> "=" <expr:ConcExpr> ";" => {
         TypeBodyItem::Assignment(AttributeNode::new(id, ty.unwrap_or(HulkType::Unknown), expr))
     },
     <MethodDecl> => TypeBodyItem::FunctionDecl(<>),
@@ -103,7 +103,7 @@ TypeBodyItem: TypeBodyItem = {
 //   programador prefiere no anotar — el inferidor llenará el hueco si puede.
 // ──────────────────────────────────────────────────────────────────────────
 Param: (LiteralNode, HulkType) = {
-    <id:Ident> <ty:TypeAnnotation?> => (id, ty.unwrap_or(HulkType::Unknown))
+    <id:VarIdent> <ty:TypeAnnotation?> => (id, ty.unwrap_or(HulkType::Unknown))
 };
 
 TypeAnnotation: HulkType = {
@@ -126,7 +126,7 @@ Type: HulkType = {
     "String"  => HulkType::String,
     "Boolean" => HulkType::Bool,
     // Tipo aplicado: Box<Number>, Pair<Number, String>
-    <id:Ident> "<" <args:Comma1<Type>> ">" =>
+    <id:AnyId> "<" <args:Comma1<Type>> ">" =>
         HulkType::Generic(id.value.as_id(), args),
     <id:Ident> => HulkType::Class(id.value.as_id()),
     "(" <t1:Type> "," <rest:Comma1<Type>> ")" => {
@@ -207,14 +207,14 @@ WhileExpr: Expr = {
 };
 
 ForExpr: Expr = {
-    "for" "(" <var:Ident> "in" "range" "(" <iter1:OrExpr> "," <iter2:OrExpr> ")" ")" <body:ExprRule> => {
+    "for" "(" <var:AnyId> "in" "range" "(" <iter1:OrExpr> "," <iter2:OrExpr> ")" ")" <body:ExprRule> => {
         let iter = Expr::FunCall(FunCallNode::new(LiteralNode::new(Literal::Id("range".to_string())), vec![iter1, iter2]));
         Expr::For(ForNode::new(var, iter, body))
     },
 };
 
 Assignment: ((LiteralNode, HulkType), Expr) = {
-    <id:Ident> <ty:TypeAnnotation?> "=" <expr:ConcExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
+    <id:VarIdent> <ty:TypeAnnotation?> "=" <expr:ConcExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
 };
 
 pub ConcExpr: Expr = {
@@ -267,12 +267,12 @@ CompOpcode: BinaryOp = {
 };
 
 pub IsExpr: Expr = {
-    <l:IsExpr> "is" <r:Ident> => Expr::TypeTest(TypeTestNode::new(l, r)),
+    <l:IsExpr> "is" <r:VarIdent> => Expr::TypeTest(TypeTestNode::new(l, r)),
     AsExpr,
 };
 
 pub AsExpr: Expr = {
-    <l:AsExpr> "as" <r:Ident> => Expr::TypeDowncast(TypeDowncastNode::new(l, r)),
+    <l:AsExpr> "as" <r:VarIdent> => Expr::TypeDowncast(TypeDowncastNode::new(l, r)),
     ArithExpr,
 };
 
@@ -338,7 +338,7 @@ Term: Expr = {
     <inst:Term> "." <call:FunCall> => {
         Expr::MethodCall(MethodCallNode::new(inst, call))
     },
-    <inst:Term> "." <member:Ident> => {
+    <inst:Term> "." <member:AnyId> => {
         Expr::MemberAccess(MemberAccessNode::new(inst, member))
     },
     <FunCall> => Expr::FunCall(<>),
@@ -351,7 +351,7 @@ Term: Expr = {
     "(" <ExprRule> ")",
     "base" "(" <args:Comma<SimpleExpr>> ")" => Expr::BaseCall(args),
     "self" => Expr::SelfRef,
-    <id:Ident> => Expr::Literal(id),
+    <id:VarIdent> => Expr::Literal(id),
      
 };
   
@@ -377,6 +377,11 @@ Num: f32 = {
 StringLit: String = { <s:"string"> => s };
 
 Ident: LiteralNode = { <l:@L> <s:"ident"> <r:@R> => LiteralNode::new_spanned(Literal::Id(s), (l, r)) };
+
+VarIdent: LiteralNode = {
+    <Ident>,
+    <l:@L> "base" <r:@R> => LiteralNode::new_spanned(Literal::Id("base".to_string()), (l, r)),
+};
 
 extern {
     type Location = usize;
