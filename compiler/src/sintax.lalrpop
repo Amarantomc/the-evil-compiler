@@ -1,4 +1,3 @@
-
 use crate::nodes::{
     binaryop_node::{BinaryOp, BinaryOpNode},
     block_node::BlockNode,
@@ -85,7 +84,7 @@ InheritanceClause: InheritanceClause = {
 };
 
 TypeBodyItem: TypeBodyItem = {
-    <id:VarIdent> <ty:TypeAnnotation?> "=" <expr:ConcExpr> ";" => {
+    <id:VarIdent> <ty:TypeAnnotation?> "=" <expr:SimpleExpr> ";" => {
         TypeBodyItem::Assignment(AttributeNode::new(id, ty.unwrap_or(HulkType::Unknown), expr))
     },
     <MethodDecl> => TypeBodyItem::FunctionDecl(<>),
@@ -165,12 +164,25 @@ pub ExprRule: Expr = {
     BlockExpr,
 };
 
+// SimpleExpr ahora representa cualquier expresión que NO sea un bloque `{...}`:
+//   - su forma "cerrada"  (ConcExpr): nunca termina en un if/while/for/let sin paréntesis.
+//   - su forma "abierta"  (ConcExprOpen): termina en un if/while/for/let cuyo cuerpo
+//     se extiende greedily hacia la derecha.
+// Esta separación cerrado/abierto es la que permite `x + if (c) a else b`
+// manteniendo la gramática libre de conflictos en LALRPOP.
 SimpleExpr: Expr = {
+    ConcExpr,
+    ConcExprOpen,
+};
+
+// Las construcciones de control son las expresiones "abiertas": su cuerpo final
+// (rama else, cuerpo de while/for, cuerpo de let) es un ExprRule completo que
+// se extiende hacia la derecha tanto como sea posible.
+OpenExpr: Expr = {
     LetExpr,
     IfExpr,
     WhileExpr,
     ForExpr,
-    ConcExpr,
 };
 
 BlockExpr: Expr = {
@@ -214,7 +226,7 @@ ForExpr: Expr = {
 };
 
 Assignment: ((LiteralNode, HulkType), Expr) = {
-    <id:VarIdent> <ty:TypeAnnotation?> "=" <expr:ConcExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
+    <id:VarIdent> <ty:TypeAnnotation?> "=" <expr:SimpleExpr> => ((id, ty.unwrap_or(HulkType::Unknown)), expr),
 };
 
 pub ConcExpr: Expr = {
@@ -355,6 +367,78 @@ Term: Expr = {
      
 };
   
+
+
+// ──────────────────────────────────────────────────────────────────────────
+//  ESCALERA "ABIERTA" (Open)
+//
+//  Cada nivel `XxxOpen` reconoce una expresión de ese nivel de precedencia cuyo
+//  operando MÁS A LA DERECHA es una construcción de control (if/while/for/let).
+//  El operando izquierdo es siempre la versión CERRADA del nivel, de modo que
+//  una expresión abierta solo puede aparecer en posición de cola.  Así:
+//     x + if (c) a else b   ⟶  x + (if (c) a else b)
+//  y para obtener (if ...) + x basta con parentizar: (if (c) a else b) + x.
+//
+//  `is`/`as` no aparecen en la escalera abierta porque su operando derecho es
+//  un identificador de tipo, no una expresión: nunca pueden alojar una cola
+//  abierta. Por eso IsExprOpen/AsExprOpen solo delegan hacia abajo.
+// ──────────────────────────────────────────────────────────────────────────
+ConcExprOpen: Expr = {
+    <l:ConcExpr> <op:ConcOpcode> <r:OrExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    OrExprOpen,
+};
+
+OrExprOpen: Expr = {
+    <l:OrExpr> <op:OrOpcode> <r:AndExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    AndExprOpen,
+};
+
+AndExprOpen: Expr = {
+    <l:AndExpr> <op:AndOpcode> <r:AssignExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    AssignExprOpen,
+};
+
+AssignExprOpen: Expr = {
+    <id:Term> ":=" <expr:AssignExprOpen> => Expr::DestAssign(DestAssignNode::new(id, expr)),
+    CompExprOpen,
+};
+
+CompExprOpen: Expr = {
+    <l:CompExpr> <op:CompOpcode> <r:IsExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    IsExprOpen,
+};
+
+IsExprOpen: Expr = {
+    AsExprOpen,
+};
+
+AsExprOpen: Expr = {
+    ArithExprOpen,
+};
+
+ArithExprOpen: Expr = {
+    <l:ArithExpr> <op:ArithOpCode> <r:FactAndOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    FactAndOpen,
+};
+
+FactAndOpen: Expr = {
+    <l:FactAnd> <op:FactAndOp> <r:UnaryExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    UnaryExprOpen,
+};
+
+UnaryExprOpen: Expr = {
+    <op:UnaryOpCode> <expr:BaseOpen> => Expr::Unary(UnaryOpNode::new(op, expr)),
+    BaseOpen,
+};
+
+BaseOpen: Expr = {
+    <l:Base> <op:PowOpcode> <r:TermOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    TermOpen,
+};
+
+TermOpen: Expr = {
+    OpenExpr,
+};
 
 FunCall: FunCallNode = {
     <id:Ident> <ta:TurboArgs?> "(" <args:Comma<SimpleExpr>> ")" => {
