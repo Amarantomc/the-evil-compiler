@@ -98,6 +98,7 @@ impl HulkType {
             other => other.clone(),
         }
     }
+    
 }
 
 // Representa todo tipo de expresión en el lenguaje
@@ -214,6 +215,28 @@ impl Expr {
                 merge_span(first, last)
             }
             Expr::TupleAccess(n) => n.tuple.span(),
+        }
+    }
+     
+      pub fn static_type(&self) -> HulkType {
+        match self {
+            Expr::Binary(n) => n.return_type.clone(),
+            Expr::Unary(n) => n.return_type.clone(),
+            Expr::Let(n) => n.return_type.clone(),
+            Expr::If(n) => n.return_type.clone(),
+            Expr::While(n) => n.return_type.clone(),
+            Expr::For(n) => n.return_type.clone(),
+            Expr::Block(n) => n.return_type.clone(),
+            Expr::FunCall(n) => n.return_type.clone(),
+            Expr::Instantiation(n) => n.return_type.clone(),
+            Expr::DestAssign(n) => n.return_type.clone(),
+            Expr::MemberAccess(n) => n.return_type.clone(),
+            Expr::MethodCall(n) => n.return_type.clone(),
+            Expr::TypeDowncast(n) => n.return_type.clone(),
+            Expr::TypeTest(n) => n.return_type.clone(),
+            Expr::Tuple(n) => n.return_type.clone(),
+            Expr::TupleAccess(n) => n.return_type.clone(),
+            Expr::Literal(_) | Expr::SelfRef | Expr::BaseCall(_) => HulkType::Unknown,
         }
     }
 }
