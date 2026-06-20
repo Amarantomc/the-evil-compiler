@@ -164,15 +164,9 @@ pub ExprRule: Expr = {
     BlockExpr,
 };
 
-// SimpleExpr ahora representa cualquier expresión que NO sea un bloque `{...}`:
-//   - su forma "cerrada"  (ConcExpr): nunca termina en un if/while/for/let sin paréntesis.
-//   - su forma "abierta"  (ConcExprOpen): termina en un if/while/for/let cuyo cuerpo
-//     se extiende greedily hacia la derecha.
-// Esta separación cerrado/abierto es la que permite `x + if (c) a else b`
-// manteniendo la gramática libre de conflictos en LALRPOP.
 SimpleExpr: Expr = {
-    ConcExpr,
-    ConcExprOpen,
+    OrExpr,
+    OrExprOpen,
 };
 
 // Las construcciones de control son las expresiones "abiertas": su cuerpo final
@@ -230,8 +224,8 @@ Assignment: ((LiteralNode, HulkType), Expr) = {
 };
 
 pub ConcExpr: Expr = {
-    <l:ConcExpr> <op:ConcOpcode> <r:OrExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
-    OrExpr,
+    <l:ConcExpr> <op:ConcOpcode> <r:IsExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    IsExpr,
 };
 
 ConcOpcode: BinaryOp = {
@@ -265,8 +259,8 @@ AssignExpr: Expr = {
 };
 
 pub CompExpr: Expr = {
-    <l:CompExpr> <op:CompOpcode> <r:IsExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
-    IsExpr,
+    <l:CompExpr> <op:CompOpcode> <r:ConcExpr> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    ConcExpr,
 };
 
 CompOpcode: BinaryOp = {
@@ -384,8 +378,8 @@ Term: Expr = {
 //  abierta. Por eso IsExprOpen/AsExprOpen solo delegan hacia abajo.
 // ──────────────────────────────────────────────────────────────────────────
 ConcExprOpen: Expr = {
-    <l:ConcExpr> <op:ConcOpcode> <r:OrExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
-    OrExprOpen,
+    <l:ConcExpr> <op:ConcOpcode> <r:IsExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    IsExprOpen,
 };
 
 OrExprOpen: Expr = {
@@ -404,8 +398,8 @@ AssignExprOpen: Expr = {
 };
 
 CompExprOpen: Expr = {
-    <l:CompExpr> <op:CompOpcode> <r:IsExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
-    IsExprOpen,
+    <l:CompExpr> <op:CompOpcode> <r:ConcExprOpen> => Expr::Binary(BinaryOpNode::new(l, op, r)),
+    ConcExprOpen,
 };
 
 IsExprOpen: Expr = {
