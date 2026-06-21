@@ -350,13 +350,27 @@ impl SemanticChecker {
             }
             Expr::For(node) => {
                 self.check_expr(&node.iterator);
+
+                // El iterador de un `for` debe ser una llamada a `range(a, b)`.
+                let is_range = matches!(
+                    node.iterator.as_ref(),
+                    Expr::FunCall(call)
+                        if matches!(&call.name.value, Literal::Id(n) if n == "range")
+                );
+                if !is_range {
+                    self.err_at(
+                        node.iterator.span().0,
+                        "Error semántico: el iterador de un 'for' debe ser una llamada a 'range(...)'.".to_string(),
+                    );
+                }
+
                 self.push_scope();
                 if let Literal::Id(ref var_name) = node.variable.value {
                     self.define_var(var_name.clone(), HulkType::Number);
                 }
                 self.check_expr(&node.body);
                 self.pop_scope();
-            }
+}
             Expr::Block(node) => {
                 for e in &node.expressions { self.check_expr(e); }
             }
@@ -813,4 +827,51 @@ impl SemanticChecker {
             ));
         }
     }
+}
+pub fn detect_inheritance_cycles(program: &Program) -> Vec<String> {
+    use std::collections::{HashMap, HashSet};
+ 
+    // Mapa tipo -> padre declarado (solo entre tipos realmente declarados).
+    let mut parent: HashMap<String, String> = HashMap::new();
+    let mut declared: HashSet<String> = HashSet::new();
+    let mut order: Vec<String> = Vec::new();
+    for stmt in &program.statements {
+        if let Statement::TypeDecl(t) = stmt {
+            let name = t.name.value.as_id();
+            if declared.insert(name.clone()) { order.push(name.clone()); }
+            if let Some(inh) = &t.inheritance {
+                parent.insert(name, inh.parent_name.value.as_id());
+            }
+        }
+    }
+ 
+    let mut errors = Vec::new();
+    let mut reported: HashSet<String> = HashSet::new();
+ 
+    // Para cada tipo, recorre su cadena de ancestros. Si se revisita un tipo ya
+    // visto en este recorrido, ese tipo cierra un ciclo.
+    for start in &order {
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut cur = start.clone();
+        loop {
+            if !seen.insert(cur.clone()) {
+                // `cur` se repitió: está sobre un ciclo.
+                if reported.insert(cur.clone()) {
+                    errors.push(format!(
+                        "Error semántico: herencia circular detectada que involucra el tipo '{}'.",
+                        cur
+                    ));
+                }
+                break;
+            }
+            match parent.get(&cur) {
+                // Solo seguimos si el padre está declarado; un padre inexistente
+                // es otro tipo de error semántico y lo cubre el checker.
+                Some(p) if declared.contains(p) => cur = p.clone(),
+                _ => break,
+            }
+        }
+    }
+ 
+    errors
 }

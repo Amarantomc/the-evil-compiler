@@ -1,0 +1,33 @@
+// 1. Suma de los dos elementos de una tupla
+{ let t = (1, 2) in if (t.0 + t.1 == 3) print("ok") else print("fail"); }
+
+// 2. Acceso al último índice de una tupla de 3
+{ let t = (10, 20, 30) in if (t.2 == 30) print("ok") else print("fail"); }
+
+// 3. Elemento String dentro de una tupla heterogénea
+{ let t = (1, "hola", true) in if (t.1 == "hola") print("ok") else print("fail"); }
+
+// 4. Elemento Boolean usado directamente como condición del if
+{ let t = (5, true) in if (t.1) print("ok") else print("fail"); }
+
+// 5. Tupla como tipo de parámetro de función: (Number, Number)
+function sum_pair(p: (Number, Number)): Number => p.0 + p.1;
+{ if (sum_pair((4, 5)) == 9) print("ok") else print("fail"); }
+
+// 6. Tupla como tipo de retorno de función
+function make_pair(a: Number, b: Number): (Number, Number) => (a, b);
+{ let t = make_pair(3, 4) in if ((t.0 == 3) & (t.1 == 4)) print("ok") else print("fail"); }
+
+// 7. Comparación entre elementos de la misma tupla
+{ let t = (7, 2) in if (t.0 > t.1) print("ok") else print("fail"); }
+
+// 8. Reasignación de una variable tupla con :=
+{ let t = (1, 2) in { t := (3, 4); if (t.0 + t.1 == 7) print("ok") else print("fail"); }; }
+
+// 9. Tupla de 4 elementos, condición combinada con &
+{ let t = (3, "ok", true, 9) in if ((t.0 == 3) & t.2 & (t.3 > 5)) print("ok") else print("fail"); }
+
+// 10. Tupla anidada 
+{ let t = ((1, 2), 3) in
+  let inner = t.0 in
+    if (inner.0 + inner.1 + t.1 == 6) print("ok") else print("fail"); }

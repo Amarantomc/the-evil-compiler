@@ -380,13 +380,24 @@ impl ExprVisitor<GeneratorResult> for CodeGenerator {
         GeneratorResult::new(res_reg, res_ty.to_string())
     }
 
-    fn visit_string(&mut self, s: &str) -> GeneratorResult {
+        fn visit_string(&mut self, s: &str) -> GeneratorResult {
         let global_name = format!("@.str.{}", self.temp_counter);
         self.temp_counter += 1;
-        let len = s.len() + 1;
+        // Emitir cada byte escapándolo según las reglas de LLVM (`c"..."` solo
+        // admite ASCII imprimible salvo `"`/`\\`, que van como `\\XX` hex).
+        let bytes = s.as_bytes();
+        let mut body = String::with_capacity(bytes.len());
+        for &b in bytes {
+            if b == b'"' || b == b'\\' || b < 0x20 || b >= 0x7f {
+                body.push_str(&format!("\\{:02X}", b));
+            } else {
+                body.push(b as char);
+            }
+        }
+        let len = bytes.len() + 1; // + terminador nulo
         self.global_decls.push(format!(
             "{} = private unnamed_addr constant [{} x i8] c\"{}\\00\"",
-            global_name, len, s
+            global_name, len, body
         ));
         GeneratorResult::new(global_name, "ptr".to_string())
     }

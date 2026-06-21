@@ -1,0 +1,53 @@
+// 1. Función genérica identidad instanciada con Number
+function identity<T>(x: T): T => x;
+{ if (identity::<Number>(5) == 5) print("ok") else print("fail"); }
+
+// 2. La misma función genérica, instanciada con String
+function identity<T>(x: T): T => x;
+{ if (identity::<String>("hola") == "hola") print("ok") else print("fail"); }
+
+// 3. Instanciada con Boolean, usada directo como condición
+function identity<T>(x: T): T => x;
+{ if (identity::<Boolean>(true)) print("ok") else print("fail"); }
+
+// 4. Genérico con dos parámetros de tipo distintos <T, U>
+function pick_first<T, U>(a: T, b: U): T => a;
+{ if (pick_first::<Number, String>(8, "x") == 8) print("ok") else print("fail"); }
+
+// 5. Cuerpo genérico con aritmética, válida tras monomorfizar a Number
+function double_it<T>(x: T): T => x + x;
+{ if (double_it::<Number>(4) == 8) print("ok") else print("fail"); }
+
+// 6. Tipo genérico Box<T> instanciado con Number
+type Box<T>(value: T) {
+    value : T = value;
+    get() : T => self.value;
+}
+{ let b = new Box::<Number>(42) in if (b.get() == 42) print("ok") else print("fail"); }
+
+// 7. El mismo Box<T> instanciado con String
+type Box<T>(value: T) {
+    value : T = value;
+    get() : T => self.value;
+}
+{ let b = new Box::<String>("hulk") in if (b.get() == "hulk") print("ok") else print("fail"); }
+
+// 8. Tipo genérico con dos parámetros <A, B>
+type Pair<A, B>(first: A, second: B) {
+    first : A = first;
+    second : B = second;
+    get_first() : A => self.first;
+    get_second() : B => self.second;
+}
+{ let p = new Pair::<Number, Boolean>(15, true) in if ((p.get_first() == 15) & p.get_second()) print("ok") else print("fail"); }
+
+// 9. Función genérica cuyo retorno es un tipo tupla: (T, T)
+function make_pair<T>(a: T, b: T): (T, T) => (a, b);
+{ let t = make_pair::<Number>(2, 3) in if (t.0 + t.1 == 5) print("ok") else print("fail"); }
+
+// 10. Dos instancias del mismo genérico con tipos distintos en un solo programa
+type Box<T>(value: T) {
+    value : T = value;
+    get() : T => self.value;
+}
+{ let a = new Box::<Number>(1) in let b = new Box::<String>("x") in if ((a.get() == 1) & (b.get() == "x")) print("ok") else print("fail"); }
