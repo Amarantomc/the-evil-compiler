@@ -7,7 +7,7 @@ pub enum Token {
     Ident(String),
 
     // ---- palabras clave ----
-    If, Elif, Else, While, For, In, Range, Let, Type, Function,
+    If, Elif, Else, While, For, In, Let, Type, Function,
     Inherits, New, Base, SelfKw, True, False, Is, As,
     KwNumber, KwString, KwBoolean,
 

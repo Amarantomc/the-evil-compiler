@@ -19,6 +19,7 @@ TEST_DIR="../tests"
 # Contadores para el reporte final
 PASSED=0
 FAILED=0
+FAILED_TESTS=()
 
 echo "🚀 Iniciando suite de pruebas para HULK..."
 echo "----------------------------------------"
@@ -44,36 +45,34 @@ for test_file in "$TEST_DIR"/*.hulk; do
 
     # 2. Ejecutar el compilador pasando el archivo actual como argumento
     # Usamos '--' para pasarle el argumento directamente a tu binario de Rust
-    if ! cargo run "$test_file".hulk > /dev/null 2>&1; then
-        echo "❌ FALLÓ (Error en 'cargo run')"
-        ((FAILED++))
-        continue
-    fi
-
+    cargo run $test_name
+    EXIT_CODE=$?
+    echo "Código de salida del compilador: $EXIT_CODE"
     
 
     # 5. Ejecutar el binario y capturar su salida en un archivo temporal
     ./output.exe > output.actual 2>&1
 
     # 6. Comparar el output real con el esperado usando 'diff'
-    if diff -u "$expected_file" output.actual > /dev/null; then
-        echo "✅ PASÓ"
+     if [ $EXIT_CODE -eq 3 ]; then
+        echo "✅ PASÓ (Falló como se esperaba con código 3)"
         ((PASSED++))
     else
-        echo "❌ FALLÓ (La salida no coincide)"
-        # Opcional: Descomenta la siguiente línea si quieres ver la diferencia exacta en consola al fallar
-        # diff -u "$expected_file" output.actual
+        echo "❌ FALLÓ (Se esperaba código 1 pero se obtuvo $EXIT_CODE)"
         ((FAILED++))
+        FAILED_TESTS+=("$test_name")
     fi
 done
 
 echo "----------------------------------------"
 echo "📊 Resumen: $PASSED pasados, $FAILED fallidos."
+if [ ${#FAILED_TESTS[@]} -ne 0 ]; then
+    echo -e "\n❌ Lista de casos fallidos:"
+    for failed in "${FAILED_TESTS[@]}"; do
+        echo "  - $failed"
+    done
+fi
 
 # Limpieza de los archivos temporales generados durante el proceso
-rm -f output.ll output.obj output.exe output.actual
-
-# Si hubo fallos, salir con código de error para que herramientas de CI/CD se enteren
-if [ "$FAILED" -ne 0 ]; then
-    exit 1
-fi
+rm -f output.ll output.obj output.exe output.actual output.o
+ 

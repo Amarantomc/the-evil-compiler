@@ -115,6 +115,10 @@ fn main() {
     if !mono.errors.is_empty() {
         fail_semantic(&src, &mono.errors);
     }
+     let inh_cycles = semantic::detect_inheritance_cycles(&program);
+    if !inh_cycles.is_empty() {
+        fail_semantic(&src, &inh_cycles);
+    }
 
     let mut inferrer = type_inferrer::TypeInferrer::new();
     inferrer.infer_program(&mut program);
