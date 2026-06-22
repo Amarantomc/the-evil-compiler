@@ -30,6 +30,7 @@ src/
 ## Build
 
 ```bash
+cd compiler
 cargo build --release
 ```
 
@@ -65,7 +66,7 @@ Diagnostics are printed to `stderr` in the format `(line,col) TYPE: message`.
 
 ## Tests
 
-Tests are plain `.hulk` programs. The simplest workflow is to compile each one
+Tests are plain `.hulk` programs. They are in `compiler/tests` .The simplest workflow is to compile each one
 and check that it builds and runs as expected.
 
 ### Run all test programs
