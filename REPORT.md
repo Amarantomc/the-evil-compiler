@@ -173,8 +173,6 @@ A continuación se listan las limitaciones conocidas de la implementación, úti
 - **Precisión numérica.** Los literales numéricos se parsean como `f32` en el lexer, pero el IR usa `double`. Aunque funcional, esto puede introducir pérdidas de precisión respecto a un `double` puro.
 - **`for` limitado a `range`.** El iterador de un `for` debe ser exactamente una llamada a `range(a, b)`; no hay iterables generales ni protocolo de iteración.
 - **`is`/`as` solo para clases.** No operan sobre primitivos ni tuplas, y `is` es lineal en el número de subtipos del tipo destino (se compara contra la vtable de cada subtipo). El mecanismo depende de que cada clase tenga una vtable única.
-- **Posiciones de error incompletas.** Muchos nodos del AST no llevan *span*, por lo que varios errores semánticos se reportan como `(0,0)`.
-- **Gestión de memoria.** Los objetos, cadenas y *buffers* de concatenación se reservan con `malloc` sin liberación: no hay recolección de basura. Es aceptable para programas cortos, pero produce fugas en ejecuciones largas.
 - **`print` con tipado laxo.** Se modela como variádico de un parámetro `Unknown`, de modo que su verificación de tipos es deliberadamente débil.
 - **Tuplas por valor y sin igualdad.** Las tuplas se cargan como valor de *struct*; no hay una operación de igualdad definida sobre ellas.
 - **Plataforma única.** El *triple* objetivo es Linux x86-64 (la variante de Windows está comentada en el código).
