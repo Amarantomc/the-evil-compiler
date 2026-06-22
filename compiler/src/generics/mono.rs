@@ -7,9 +7,7 @@ use crate::nodes::{
     literal_node::{Literal, LiteralNode},
 };
 
-/// Una instancia solicitada: nombre base + argumentos de tipo concretos.
-#[derive(Clone, PartialEq, Eq, Hash)]
-struct Request { base: String, args: Vec<String> } // args ya manglados
+ 
 
 pub struct Monomorphizer {
     fn_templates:   HashMap<String, FunctionDecl>,

@@ -4,7 +4,7 @@ use std::process::{exit, Command};
 use lalrpop_util::lalrpop_mod;
 
 pub mod expr_visitor;
-lalrpop_mod!(sintax);
+lalrpop_mod!(grammar);
 pub mod codegen;
 pub mod codegen_visitor;
 pub mod type_inferrer;
@@ -101,7 +101,7 @@ fn main() {
     };
 
     // ---- 2. Léxico + Sintáctico (un único error de LALRPOP) ----------------
-    let parser =sintax::ProgramParser::new();
+    let parser =grammar::ProgramParser::new();
     let mut program = match parser.parse(Lexer::new(&src)) {
         Ok(ast) => ast,
         Err(e) => fail(from_parse_error(&src, e)), // decide LEXICAL vs SYNTACTIC
