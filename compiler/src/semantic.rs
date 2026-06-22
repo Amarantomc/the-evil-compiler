@@ -804,15 +804,7 @@ impl SemanticChecker {
         }
     }
 
-    /// Emite un error si `actual` no conforma a `expected`.
-    fn expect_conforms(&mut self, actual: &HulkType, expected: &HulkType, ctx: &str) {
-        if actual != &HulkType::Unknown && !self.conforms(actual, expected) {
-            self.err(format!(
-                "Error de tipo en {}: {:?} no conforma a {:?}.",
-                ctx, actual, expected
-            ));
-        }
-    }
+     
     /// Un operando de `@` / `@@` es válido si tiene representación textual:
     /// String, Number o Bool (o un Unknown aún sin resolver).
     fn expect_concatenable(&mut self, actual: &HulkType, offset: usize, ctx: &str) {

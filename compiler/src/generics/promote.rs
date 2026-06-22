@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+
 use crate::nodes::{
-    expr_node::{Expr, HulkType},
+    expr_node::{Expr},
     function_decl_node::FunctionDecl,
     type_decl_node::TypeDeclNode,
     program_node::{Program, Statement},
-    literal_node::Literal,
+    
 };
 
 pub fn promote_program(program: &mut Program) {

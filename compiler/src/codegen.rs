@@ -1,9 +1,9 @@
 use std::fs;
 use std::collections::HashMap;
 use crate::nodes::function_decl_node::FunctionDecl;
-use crate::nodes::literal_node::Literal;
+
 use crate::nodes::program_node::{Program, Statement};
-use crate::nodes::type_decl_node::{AttributeNode, TypeDeclNode};
+use crate::nodes::type_decl_node::{ TypeDeclNode};
 use crate::nodes::expr_node::{HulkType, Expr};
  
 
@@ -191,7 +191,7 @@ impl CodeGenerator {
     pub fn get_field_index(&self, llvm_type: &str, field_name: &str) -> usize {
         let key = llvm_type.trim_start_matches('%');
         // Buscamos primero en class_meta (campos de datos reales).
-        if let Some(meta) = self.class_meta.get(key) {
+        if let Some(_) = self.class_meta.get(key) {
             // Construimos la lista completa de campos de datos incluyendo
             // los heredados del padre, en orden padre-primero.
             let all_fields = self.collect_all_fields(key);
@@ -318,7 +318,7 @@ impl CodeGenerator {
             HulkType::Unknown  => "ptr".to_string(),
             HulkType::Tuple(elems) => format!("%{}", Self::tuple_struct_name(elems)),
             HulkType::Param(_) => "ptr".to_string(),
-            HulkType::Generic(_, hulk_types) => "ptr".to_string(),
+            HulkType::Generic(_, _) => "ptr".to_string(),
         }
     }
  
