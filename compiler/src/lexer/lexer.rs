@@ -10,13 +10,13 @@ pub struct LexicalError {
     pub pos: usize,
 }
 
-// Qué construir cuando una regla casa.
+ 
 enum Kind {
-    Ident,             // promover a keyword o Ident
+    Ident,              
     Int,
     Float,
     StrLit,
-    Fixed(Token),      // operador/puntuación de token fijo
+    Fixed(Token),       
 }
 
 pub struct Lexer<'input> {
@@ -152,7 +152,7 @@ impl<'input> Iterator for Lexer<'input> {
                 continue;
             }
 
-            // 3. Opcional: Saltar comentarios de bloque (/* ... */)
+             
             if rest.starts_with("/*") {
                 if let Some(end_comment_pos) = rest.find("*/") {
                     self.pos += end_comment_pos + 2; // Avanza pasando el "*/"
@@ -172,7 +172,7 @@ impl<'input> Iterator for Lexer<'input> {
             break;
         }
 
-        // --- A partir de aquí tu lógica de reglas se mantiene EXACTAMENTE IGUAL ---
+         
         if self.pos >= self.input.len() {
             return None;
         }

@@ -1,53 +1,4 @@
-//! # Chequeo semántico para HULK
-//!
-//! ## Responsabilidad
-//!
-//! Este módulo recibe el AST **ya anotado** por `TypeInferrer` y verifica todas
-//! las reglas semánticas del lenguaje.  No infiere tipos: solo los lee de los
-//! nodos y comprueba que sean correctos.
-//!
-//! ## Reglas verificadas
-//!
-//! ### Operaciones binarias
-//! - Operandos de aritmética (`+`, `-`, `*`, `/`, `%`, `^`) deben ser `Number`.
-//! - Operandos de comparación relacional (`<`, `>`, `<=`, `>=`) deben ser `Number`.
-//! - Operandos de igualdad (`==`, `!=`) deben tener el mismo tipo.
-//! - Operandos lógicos (`&`, `|`) deben ser `Bool`.
-//! - Operandos de concatenación (`@`, `@@`) deben conformar a `String`.
-//!
-//! ### Operaciones unarias
-//! - `!expr` → `expr` debe ser `Bool`.
-//! - `-expr`, `+expr` → `expr` debe ser `Number`.
-//!
-//! ### Condicionales
-//! - La condición de `if`/`elif`/`while` debe ser `Bool`.
-//!
-//! ### Variables y asignación
-//! - La variable en `:=` debe estar declarada en el scope.
-//! - El tipo del valor asignado debe conformar al tipo declarado.
-//!
-//! ### Funciones
-//! - Toda función llamada debe estar declarada.
-//! - El número de argumentos debe coincidir con la aridad.
-//! - Cada argumento debe conformar al tipo del parámetro correspondiente.
-//! - El tipo del cuerpo debe conformar al tipo de retorno declarado.
-//!
-//! ### Tipos y constructores
-//! - Todo tipo instanciado debe estar declarado.
-//! - El número de argumentos del constructor debe coincidir.
-//! - Cada argumento debe conformar al parámetro correspondiente.
-//!
-//! ### Acceso a miembros
-//! - Solo se puede acceder a campos/métodos sobre valores de tipo clase.
-//! - El campo/método debe existir en la clase (o en algún ancestro).
-//! - En llamadas a método, la aridad y tipos de argumentos deben ser correctos.
-//!
-//! ### `self` y `base()`
-//! - `self` solo es válido dentro de un método de tipo.
-//! - `base()` solo es válido dentro de un método de un tipo que tenga padre.
-//! - `base()` solo es válido si el padre define el mismo método.
-
-use std::collections::HashMap;
+ use std::collections::HashMap;
 
 use crate::{
     nodes::{
@@ -63,13 +14,7 @@ use crate::{
 
 };
 use crate::type_inferrer::Environment;
-
-// ============================================================================
-// Chequedor semántico
-// ============================================================================
-
-/// Error semántico con posición opcional (offset de byte en el fuente).
-/// `offset == 0` significa "sin posición sensata" → se reportará como (0,0).
+ 
 #[derive(Debug, Clone)]
 pub struct SemError {
     pub offset: usize,
@@ -77,18 +22,11 @@ pub struct SemError {
 }
 
 pub struct SemanticChecker {
-    /// Errores semánticos encontrados.
+    
     pub errors: Vec<SemError>,
-    /// Referencia al entorno construido por el inferidor (tipos y funciones).
-    /// El checker lo recibe tras la inferencia y lo usa en modo solo-lectura
-    /// para verificar jerarquía, aridad, etc.
     env: Environment,
-    /// Contexto: tipo de `self` en el método actual (`None` si no estamos en uno).
     self_type: Option<String>,
-    /// Contexto: nombre del método en curso (para validar `base()`).
-    current_method: Option<String>,
-    /// Scope de variables locales: nombre → tipo ya resuelto.
-    /// Se reconstruye al verificar funciones, tipos y expresiones `let`.
+    current_method: Option<String>, 
     scopes: Vec<HashMap<String, HulkType>>,
 }
 
@@ -106,10 +44,7 @@ impl SemanticChecker {
         checker.scopes[0].insert("E".to_string(), HulkType::Number);
         checker
     }
-
-    // ========================================================================
-    // Punto de entrada público
-    // ========================================================================
+ 
 
     /// Verifica el AST ya anotado.  Devuelve `true` si no hay errores.
     pub fn check_program(&mut self, program: &Program) -> bool {
@@ -121,11 +56,7 @@ impl SemanticChecker {
             }
         }
         self.errors.is_empty()
-    }
-
-    // ========================================================================
-    // Verificación de declaraciones de función
-    // ========================================================================
+    } 
 
     fn check_function_decl(&mut self, decl: &FunctionDecl) {
         let fn_name = decl.name.value.as_id();
@@ -150,11 +81,7 @@ impl SemanticChecker {
         }
 
         self.pop_scope();
-    }
-
-    // ========================================================================
-    // Verificación de declaraciones de tipo
-    // ========================================================================
+    } 
 
     fn check_type_decl(&mut self, decl: &TypeDeclNode) {
         let type_name = decl.name.value.as_id();
@@ -217,10 +144,7 @@ impl SemanticChecker {
 
         self.self_type = None;
     }
-
-    // ========================================================================
-    // Verificación de expresiones (recorrido del AST)
-    // ========================================================================
+ 
 
     fn check_expr(&mut self, expr: &Expr) {
         match expr {
@@ -622,8 +546,7 @@ impl SemanticChecker {
  
                 let expr_ty = self.type_of(&node.expr);
                 let target_name = node.target_type.value.as_id();
- 
-                // Rule 1: source must be a class type.
+  
                 match &expr_ty {
                     HulkType::Class(_) | HulkType::Unknown => {}
                     other => {
@@ -631,11 +554,11 @@ impl SemanticChecker {
                             "Error semántico: el operador 'as' no puede aplicarse a tipo primitivo {:?}.",
                             other
                         ));
-                        return; // no further checks make sense
+                        return;  
                     }
                 }
  
-                // Rule 2: target type must exist.
+                 
                 if !self.env.types.contains_key(&target_name) {
                     self.err(format!(
                         "Error semántico: el tipo '{}' usado en 'as' no está declarado.",
@@ -644,8 +567,7 @@ impl SemanticChecker {
                     return;
                 }
  
-                // Rule 3: source and target must be related (one is an
-                // ancestor of the other).
+                 
                 if let HulkType::Class(ref source_name) = expr_ty {
                     let source_is_ancestor_of_target =
                         self.env.is_subtype(&target_name, source_name);
@@ -659,18 +581,14 @@ impl SemanticChecker {
                         ));
                     }
                 }
-                // If expr_ty is Unknown we skip Rule 3 silently — the type
-                // inferrer could not determine the source type, and the
-                // runtime will handle it.
+                 
             }
         ,
         Expr::TypeTest(node) => {
             self.check_expr(&node.expr);
 
             let expr_ty = self.type_of(&node.expr);
-
-            // Rule 1: source must be a class type (or Unknown to allow
-            // partially-inferred programs to proceed).
+ 
             match &expr_ty {
                 HulkType::Class(_) | HulkType::Unknown => {}
                 other => {
@@ -681,7 +599,7 @@ impl SemanticChecker {
                 }
             }
 
-            // Rule 2: target type must exist.
+             
             let target_name = node.target_type.value.as_id();
             if !self.env.types.contains_key(&target_name) {
                 self.err(format!(
@@ -717,9 +635,7 @@ impl SemanticChecker {
     }
 }
 
-    // ========================================================================
-    // Helpers de scope
-    // ========================================================================
+     
 
     fn push_scope(&mut self) { self.scopes.push(HashMap::new()); }
     fn pop_scope(&mut self)  { self.scopes.pop(); }
@@ -743,12 +659,7 @@ impl SemanticChecker {
         }
         None
     }
-
-    // ========================================================================
-    // Helpers de tipos
-    // ========================================================================
-
-    /// Devuelve el tipo de una expresión ya anotada.
+ 
     fn type_of(&self, expr: &Expr) -> HulkType {
         match expr {
             Expr::Literal(n) => match &n.value {

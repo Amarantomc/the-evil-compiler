@@ -1,22 +1,4 @@
-//! # Inferidor de tipos para HULK — enfoque por restricciones + worklist
-//!
-//! ## Responsabilidad
-//!
-//! Este módulo **solo infiere tipos**: recorre el AST, genera restricciones,
-//! las resuelve por unificación y anota cada nodo con el `HulkType` concreto
-//! aprendido.  **No emite errores semánticos** (eso es responsabilidad de
-//! `SemanticChecker`).  Solo registra errores estructurales irrecuperables que
-//! impiden continuar la inferencia (e.g. función no declarada al momento de
-//! generar restricciones).
-//!
-//! ## Etapas
-//!
-//! 1. **Registro de declaraciones** — firma estática de tipos y funciones.
-//! 2. **Generación de restricciones** — recorrido bottom-up del AST.
-//! 3. **Resolución iterativa** — worklist + unificación hasta punto fijo.
-//! 4. **Anotación del AST** — sustituir `TypeVar` por el tipo concreto inferido.
-
-use std::collections::{HashMap, VecDeque};
+ use std::collections::{HashMap, VecDeque};
 
 use crate::{
     expr_visitor::ExprVisitor,
@@ -24,10 +6,7 @@ use crate::{
         binaryop_node::BinaryOp, block_node::BlockNode, destassing_node::DestAssignNode, expr_node::{Expr, HulkType}, for_node::ForNode, funcall_node::FunCallNode, function_decl_node::FunctionDecl, if_node::IfNode, let_node::LetNode, literal_node::Literal, member_access_node::{MemberAccessNode, MethodCallNode}, program_node::{Program, Statement}, tuple_node::{TupleAccessNode, TupleNode}, type_decl_node::TypeDeclNode, type_test_node::TypeTestNode, unaryop_node::UnaryOp, while_node::WhileNode
     },
 };
-
-// ============================================================================
-// Tipo interno del inferidor
-// ============================================================================
+ 
 
 /// Tipo interno usado durante la inferencia.
 /// Las posiciones sin anotar se representan con `InferType::Var(id)`.
@@ -55,10 +34,7 @@ impl InferType {
 
     pub fn is_var(&self) -> bool { matches!(self, InferType::Var(_)) }
 }
-
-// ============================================================================
-// Restricciones
-// ============================================================================
+ 
 
 #[derive(Debug, Clone)]
 pub enum Constraint {
@@ -68,10 +44,7 @@ pub enum Constraint {
     Conform(InferType, InferType),
     TupleProject(InferType, usize, InferType),
 }
-
-// ============================================================================
-// Sustitución (union-find plano)
-// ============================================================================
+ 
 
 #[derive(Default, Debug)]
 pub struct Substitution {
@@ -108,10 +81,7 @@ impl Substitution {
         }
     }
 }
-
-// ============================================================================
-// Información semántica compartida con el checker
-// ============================================================================
+ 
 
 #[derive(Clone, Debug)]
 pub struct FieldInfo {
@@ -134,10 +104,7 @@ pub struct TypeInfo {
     pub methods: Vec<MethodInfo>,
     pub parent: Option<String>,
 }
-
-// ============================================================================
-// Entorno
-// ============================================================================
+ 
 
 pub struct Environment {
     scopes: Vec<HashMap<String, InferType>>,
@@ -198,10 +165,7 @@ impl Environment {
         }
         false
     }
-
-    // ------------------------------------------------------------------
-    // Relación de conformidad (subtipado)
-    // ------------------------------------------------------------------
+ 
 
     pub fn conforms_concrete(&self, sub: &HulkType, sup: &HulkType) -> bool {
         if sub == sup { return true; }
@@ -267,10 +231,7 @@ impl Environment {
         }
         res
     }
-
-    // ------------------------------------------------------------------
-    // Búsqueda de miembros en la jerarquía
-    // ------------------------------------------------------------------
+ 
 
     pub fn lookup_field(&self, type_name: &str, field: &str) -> Option<FieldInfo> {
         if let Some(ti) = self.types.get(type_name) {
@@ -322,10 +283,7 @@ impl Environment {
         }
     }
 }
-
-// ============================================================================
-// Generador de variables de tipo frescas
-// ============================================================================
+ 
 
 struct VarGen(u32);
 
@@ -343,10 +301,7 @@ impl VarGen {
         if *h == HulkType::Unknown { self.fresh() } else { InferType::from_hulk(h) }
     }
 }
-
-// ============================================================================
-// Inferidor principal
-// ============================================================================
+ 
 
 pub struct TypeInferrer {
     pub env: Environment,
@@ -354,8 +309,6 @@ pub struct TypeInferrer {
     constraints: Vec<Constraint>,
     pub subst: Substitution,
     /// Errores estructurales que impiden continuar la inferencia.
-    /// Los errores semánticos (conformidad, tipos incompatibles) se detectan
-    /// en `SemanticChecker`, no aquí.
     pub inference_errors: Vec<String>,
     changed: bool,
 }
@@ -372,13 +325,7 @@ impl TypeInferrer {
         }
         
     }
-
-    // ========================================================================
-    // Punto de entrada público
-    // ========================================================================
-
-    /// Ejecuta las cuatro etapas de inferencia y anota el AST.
-    /// Devuelve `true` si no hubo errores estructurales (no semánticos).
+ 
     pub fn infer_program(&mut self, program: &mut Program) -> bool {
         self.register_declarations(program);
         
@@ -403,10 +350,7 @@ impl TypeInferrer {
 
         self.inference_errors.is_empty()
     }
-
-    // ========================================================================
-    // Etapa 1 — Registro de declaraciones
-    // ========================================================================
+ 
 
     fn register_declarations(&mut self, program: &Program) {
         for stmt in &program.statements {
@@ -455,10 +399,7 @@ impl TypeInferrer {
         let ret = self.var_gen.from_annotation(&decl.return_type);
         self.env.functions.insert(name, (params, ret));
     }
-
-    // ========================================================================
-    // Etapa 2 — Generación de restricciones
-    // ========================================================================
+ 
 
     fn gen_function_decl(&mut self, decl: &mut FunctionDecl) {
         self.env.push_scope();
@@ -539,10 +480,7 @@ impl TypeInferrer {
 
         self.env.self_type = None;
     }
-
-    // ========================================================================
-    // Helpers de restricciones
-    // ========================================================================
+ 
 
     fn add_eq(&mut self, a: InferType, b: InferType) {
         self.constraints.push(Constraint::Eq(a, b));
@@ -555,10 +493,7 @@ impl TypeInferrer {
     fn add_tuple_project(&mut self, tuple_ty: InferType, index: usize, result: InferType) {
         self.constraints.push(Constraint::TupleProject(tuple_ty, index, result));
     }
-
-    // ========================================================================
-    // Etapa 3 — Resolución iterativa (worklist + unificación)
-    // ========================================================================
+ 
 
     fn solve_constraints(&mut self) {
         let all: Vec<Constraint> = self.constraints.drain(..).collect();
@@ -573,9 +508,7 @@ impl TypeInferrer {
                 worklist.push_back(pending);
                 stalled_count += 1;
                 if stalled_count > worklist.len() + 1 {
-                    // Punto fijo: las restricciones restantes son irresolubles
-                    // (las Conform con Vars sin resolver se descartan silenciosamente;
-                    //  el checker detectará Unknown en el AST anotado si es relevante)
+                   
                     break;
                 }
             } else if self.changed {
@@ -584,12 +517,7 @@ impl TypeInferrer {
         }
     }
 
-    /// Procesa una restricción.
-    /// - `None`  → resuelta (o descartada).
-    /// - `Some` → no se pudo resolver todavía; re-encolar.
-    ///
-    /// **No emite errores semánticos** — los conflictos de tipo se dejan pasar
-    /// para que el `SemanticChecker` los detecte sobre el AST anotado.
+    
     fn process_constraint(&mut self, c: Constraint) -> Option<Constraint> {
         match c {
             Constraint::Eq(a, b) => {
@@ -607,8 +535,7 @@ impl TypeInferrer {
                         None
                     }
 
-                    // Concreto ≡ Concreto: intentar reconciliación por LCA.
-                    // Los conflictos reales los detecta el SemanticChecker.
+                     
                     (InferType::Concrete(_), InferType::Concrete(_)) => None,
                 }
             }
@@ -644,10 +571,7 @@ impl TypeInferrer {
         }
     }
     }
-
-    // ========================================================================
-    // Etapa 4 — Anotación del AST
-    // ========================================================================
+ 
 
     pub fn resolve(&self, t: &InferType) -> HulkType {
         match self.subst.apply(t) {
@@ -962,10 +886,7 @@ impl TypeInferrer {
         }
     }
 }
-
-// ============================================================================
-// ExprVisitor — generación de restricciones (Etapa 2)
-// ============================================================================
+ 
 
 impl ExprVisitor<InferType> for TypeInferrer {
 
@@ -1280,23 +1201,23 @@ impl ExprVisitor<InferType> for TypeInferrer {
     }
     
     fn visit_type_downcast(&mut self, node: &mut crate::nodes::type_downcast_node::TypeDowncastNode) -> InferType {
-        // Visit sub-expression for constraint generation.
+        
         node.expr.accept(self);
  
         let target_name = node.target_type.value.as_id();
         let result_ty = HulkType::Class(target_name.clone());
  
-        // Annotate node with the declared target type.
+        
         node.return_type = result_ty;
  
         InferType::class(&target_name)
     }
 
     fn visit_type_test(&mut self, node: &mut TypeTestNode) -> InferType {
-        // Visit sub-expression for constraint generation.
+        
         node.expr.accept(self);
  
-        // Annotate this node and return Bool.
+         
         node.return_type = HulkType::Bool;
         InferType::bool_t()
     }

@@ -147,7 +147,7 @@ impl Monomorphizer {
     }
 }
 
-// --- nombres manglados ------------------------------------------------------
+ 
 
 fn mangle_name(base: &str, args: &[HulkType]) -> String {
     if args.is_empty() { return base.to_string(); }
@@ -155,7 +155,7 @@ fn mangle_name(base: &str, args: &[HulkType]) -> String {
         args.iter().map(|t| t.mangle()).collect::<Vec<_>>().join("_"))
 }
 
-// --- especialización de una función -----------------------------------------
+ 
 
 fn specialize_fn(tpl: &FunctionDecl, args: &[HulkType], mangled: &str) -> FunctionDecl {
     let map: HashMap<String, HulkType> =
@@ -170,7 +170,7 @@ fn specialize_fn(tpl: &FunctionDecl, args: &[HulkType], mangled: &str) -> Functi
     inst
 }
 
-// --- especialización de un tipo ---------------------------------------------
+ 
 
 fn specialize_type(tpl: &TypeDeclNode, args: &[HulkType], mangled: &str) -> TypeDeclNode {
     let map: HashMap<String, HulkType> =

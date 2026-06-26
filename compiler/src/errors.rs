@@ -1,6 +1,4 @@
-//! Capa de diagnósticos conforme al "HULK Compiler Interface Contract".
-//! Formato exacto: `(line,col) TYPE: message`  (line/col 1-based, (0,0) si no hay).
-//! Códigos de salida: 1=LEXICAL, 2=SYNTACTIC, 3=SEMANTIC (el más fundamental manda).
+
 
 use lalrpop_util::ParseError;
 use crate::lexer::token::Token;
